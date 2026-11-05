@@ -70,7 +70,7 @@ checar "POST /deteccoes 503 (visão fora do ar)" 503 '"visao_indisponivel"'   -H
 checar "GET /painel 503 (arquivo inválido)" 503 '"painel_invalido"' -H 'Prefer: code=503' "$MOCK_URL/painel"
 checar "GET /painel 404 (sem arquivo)" 404 '"painel_indisponivel"' -H 'Prefer: code=404' "$MOCK_URL/painel"
 checar "POST /assistente fora do ar (recusa + SP156)" 200 'sp156.prefeitura.sp.gov.br'   -H 'Content-Type: application/json' -H 'Prefer: example=assistente_fora_do_ar'   -d '{"pergunta":"Quem conserta a calcada?"}' "$MOCK_URL/assistente"
-checar "POST /relatos 422 fora de SP" 422 'fora da área de atendimento'   -H 'Prefer: code=422, example=fora_da_area'   -F "foto=@$FOTO_CURL;type=image/jpeg" -F lat=-22.9 -F lon=-43.2 -F fonte=app "$MOCK_URL/relatos"
+checar "POST /relatos 422 fora de SP (codigo fora_da_area)" 422 '"fora_da_area"'   -H 'Prefer: code=422, example=fora_da_area'   -F "foto=@$FOTO_CURL;type=image/jpeg" -F lat=-22.9 -F lon=-43.2 -F fonte=app "$MOCK_URL/relatos"
 
 echo "==> Emenda rc2: POST /relatos (autor_id e X-Device-Token)"
 checar "POST /relatos app com autor_id" 201 '"status":"novo"' \
@@ -94,6 +94,8 @@ checar "GET /relatos/proximos 400 forçado" 400 '"requisicao_invalida"' \
   -H 'Prefer: code=400' "$MOCK_URL/relatos/proximos?lat=-23.5505&lon=-46.6333"
 checar "GET /relatos/proximos fora de SP (422 forçado)" 422 '"dados_invalidos"' \
   -H 'Prefer: code=422' "$MOCK_URL/relatos/proximos?lat=10&lon=10"
+checar "GET /relatos/proximos fora de SP (codigo fora_da_area)" 422 '"fora_da_area"' \
+  -H 'Prefer: code=422, example=fora_da_area' "$MOCK_URL/relatos/proximos?lat=10&lon=10"
 
 echo "==> Emenda rc2: GET /meus-relatos"
 checar "GET /meus-relatos" 200 '"foto_url"' -H "X-Autor-Id: $AUTOR_FICTICIO" "$MOCK_URL/meus-relatos"

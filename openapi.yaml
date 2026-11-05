@@ -20,7 +20,7 @@ info:
     (`visao_indisponivel`) e em `GET /painel` (`painel_invalido`); o limite de itens das
     listas `GET /relatos/proximos` (1000) e `GET /meus-relatos` (100); a resposta do
     `POST /assistente` quando o assistente está fora do ar; e o 422 de localização fora de
-    São Paulo, com exemplo.
+    São Paulo, com exemplo e código próprio (`fora_da_area`).
 
     ## Convenções
 
@@ -914,7 +914,13 @@ components:
                   - campo: tamanho
                     problema: deve ser um inteiro entre 1 e 100
     DadosInvalidos:
-      description: A requisição está bem formada, mas os dados não passam na validação. Por exemplo, coordenadas fora do município de São Paulo, imagem ilegível ou pergunta vazia.
+      description: |
+        A requisição está bem formada, mas os dados não passam na validação (valor fora do intervalo, imagem ilegível, pergunta vazia).
+
+        **Localização fora de São Paulo** é um caso à parte, com o código próprio `fora_da_area`
+        (e `detalhes[0].campo` = `lat`), para o app tratá-lo sem ler o texto da mensagem: ele deve
+        mostrar "Você está fora de São Paulo; toque no mapa dentro da cidade". Todos os outros 422
+        usam `dados_invalidos`.
       content:
         application/json:
           schema:
@@ -930,7 +936,7 @@ components:
             fora_da_area:
               summary: Localização fora de São Paulo (o app deve pedir para tocar no mapa dentro da cidade)
               value:
-                codigo: dados_invalidos
+                codigo: fora_da_area
                 mensagem: Os dados enviados não são válidos.
                 detalhes:
                   - campo: lat
@@ -1584,7 +1590,10 @@ components:
       properties:
         codigo:
           type: string
-          description: Código estável do erro, em `snake_case`.
+          description: |
+            Código estável do erro, em `snake_case`. O app decide o que mostrar por este campo,
+            não pelo texto de `mensagem`. Em 422 há dois: `dados_invalidos` (padrão) e
+            `fora_da_area` (localização fora do município de São Paulo).
           example: dados_invalidos
         mensagem:
           type: string
