@@ -224,3 +224,6 @@ __marimo__/
 *.tfstate
 *.tfstate.*
 secrets.h
+
+# Fotos e dados locais da API em desenvolvimento
+api/dados/
