@@ -130,6 +130,28 @@ passo-seguro/
 - Fotos publicadas têm rostos e placas desfocados.
 - O identificador do cidadão usa hash SHA-256 com sal, e coordenadas públicas são arredondadas para cerca de 100 m.
 
+## Contratos e mock
+
+O contrato da API está em [`openapi.yaml`](./openapi.yaml) (OpenAPI 3.1) e as classes de problema, em [`contratos/classes.yaml`](./contratos/classes.yaml), a fonte única de verdade.
+
+**Validar** (precisa de Node.js e Python 3):
+
+```bash
+scripts/validar-contratos.sh
+```
+
+Faz o lint do `openapi.yaml` e confere se o enum `categoria` é igual, na mesma ordem, às classes de `classes.yaml`.
+
+**Rodar o mock** em `http://localhost:4010` (precisa de Node.js):
+
+```bash
+scripts/mock.sh
+curl http://localhost:4010/painel
+curl -H "Authorization: Bearer token-ficticio" "http://localhost:4010/relatos?status=novo"
+```
+
+Para escolher um exemplo, use `-H "Prefer: example=obstaculo"`; para um código de resposta, `-H "Prefer: code=422"`.
+
 ## Como rodar
 
 Em construção. Esta seção será preenchida após a integração de ponta a ponta (meta: 15/11).

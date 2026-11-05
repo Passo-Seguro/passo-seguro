@@ -1,0 +1,1076 @@
+openapi: 3.1.0
+
+info:
+  title: API Passo Seguro
+  version: 1.0.0-rc1
+  summary: Contratos de integração da plataforma de zeladoria colaborativa de calçadas de São Paulo.
+  description: |
+    A API é o **único ponto de integração** do Passo Seguro: app (PWA), robô inspetor,
+    serviço de visão, assistente, automação de triagem (RPA) e pipeline de dados
+    (Airflow + Databricks) conversam somente por ela.
+
+    Este contrato está **em revisão** (v1.0.0-rc1). Mudanças passam por pull request que
+    altere este arquivo e avise as outras partes.
+
+    ## Convenções
+
+    - Textos em português; campos em `snake_case`, sem acento.
+    - Classes de problema (`categoria`): `buraco`, `piso_danificado`, `obstaculo`,
+      `veiculo_na_calcada`. A definição de cada uma está em `contratos/classes.yaml`,
+      a fonte única de verdade, e o enum deste arquivo é conferido contra ela por
+      `scripts/checar-classes.py`.
+    - `confianca` é sempre um número de 0 a 1.
+    - Datas em ISO 8601 com fuso, por exemplo `2026-11-04T14:32:10-03:00`.
+    - Coordenadas em graus decimais (WGS84).
+
+    ## Autenticação (decisão provisória)
+
+    O esquema `bearerAuth` (cabeçalho `Authorization: Bearer <token>`) protege apenas as
+    **chamadas entre serviços**: `GET /relatos` (triagem e Airflow) e `POST /deteccoes`
+    (API e triagem).
+
+    `POST /relatos` (app e robô), `POST /assistente` e `GET /painel` ficam **públicos**.
+    Esta é uma decisão provisória, para simplificar o MVP. Antes de uso real, avaliar
+    autenticação do app e do robô, limite de requisições e proteção contra abuso.
+
+    ## Limites (decisão provisória)
+
+    A foto de `POST /relatos` e a imagem de `POST /deteccoes` podem ter no máximo
+    **10 MB** (10 × 1024 × 1024 bytes). Acima disso a API responde **413**.
+
+    ## Dados pessoais
+
+    O campo `descricao` é texto livre digitado pelo cidadão e **pode conter telefone ou
+    CPF**. A API guarda o texto como recebido; a automação de triagem mascara esses dados
+    depois. Todos os exemplos deste contrato usam dados claramente fictícios.
+
+    ## Mock
+
+    `scripts/mock.sh` sobe um servidor de mock em `http://localhost:4010`. Para escolher
+    um exemplo específico, envie o cabeçalho `Prefer: example=<nome>`; para escolher um
+    código de resposta, `Prefer: code=<codigo>`.
+
+servers:
+  - url: http://localhost:4010
+    description: Mock local (scripts/mock.sh)
+
+tags:
+  - name: Relatos
+    description: Relatos de problemas em calçadas, feitos pelo app ou pelo robô inspetor.
+  - name: Deteccoes
+    description: Detecção de problemas em imagens pelo serviço de visão.
+  - name: Assistente
+    description: Assistente com LLM local que orienta o pedestre, com fontes.
+  - name: Painel
+    description: Prioridades por subprefeitura, vindas do pipeline de dados.
+
+paths:
+  /relatos:
+    post:
+      tags: [Relatos]
+      operationId: criarRelato
+      summary: Cria um relato de problema na calçada
+      description: |
+        Chamado pelo **app** e pelo **robô**. Recebe a foto, a localização e uma descrição
+        opcional; a API pede a detecção ao serviço de visão e devolve o id do relato e a
+        classe detectada.
+
+        O relato é **sempre criado com status `novo`**. Se a visão não detectar nada, o
+        relato é criado do mesmo jeito, com `categoria` e `confianca` nulos. A regra
+        "confiança menor que 0,5 vai para `revisao_humana`" **não é da API: é da triagem**
+        (RPA), que muda o status depois.
+
+        A foto pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
+
+        Endpoint **público** (decisão provisória, ver a introdução do contrato).
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NovoRelato'
+            encoding:
+              foto:
+                contentType: image/jpeg, image/png
+            examples:
+              app:
+                summary: Relato feito pelo app
+                value:
+                  foto: calcada-se.jpg
+                  lat: -23.5505
+                  lon: -46.6333
+                  descricao: Buraco grande na calçada em frente ao número 120.
+                  fonte: app
+              robo:
+                summary: Relato enviado pelo robô inspetor
+                value:
+                  foto: robo-0042.jpg
+                  lat: -23.5672
+                  lon: -46.6916
+                  fonte: robo
+      responses:
+        '201':
+          description: Relato criado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelatoCriado'
+              examples:
+                buraco:
+                  summary: Classe buraco
+                  value:
+                    id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                    categoria: buraco
+                    confianca: 0.94
+                    status: novo
+                piso_danificado:
+                  summary: Classe piso_danificado
+                  value:
+                    id: 5d1c7e22-93aa-4b0e-b7c1-2e4f8a6d9c10
+                    categoria: piso_danificado
+                    confianca: 0.88
+                    status: novo
+                obstaculo:
+                  summary: Classe obstaculo
+                  value:
+                    id: a47e90b5-6c3f-4d18-9a2b-7f1e3c5d8e22
+                    categoria: obstaculo
+                    confianca: 0.81
+                    status: novo
+                veiculo_na_calcada:
+                  summary: Classe veiculo_na_calcada
+                  value:
+                    id: c92d4f61-0b8e-47a3-a5d6-1e9b7f3a2c33
+                    categoria: veiculo_na_calcada
+                    confianca: 0.97
+                    status: novo
+                nada_detectado:
+                  summary: A visão não detectou nada
+                  value:
+                    id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
+                    categoria: null
+                    confianca: null
+                    status: novo
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '413':
+          $ref: '#/components/responses/ArquivoGrande'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+    get:
+      tags: [Relatos]
+      operationId: listarRelatos
+      summary: Lista relatos, paginados
+      description: |
+        Chamado pela **triagem (RPA)** e pelo **Airflow** para buscar relatos, por exemplo
+        `GET /relatos?status=novo`. Sem o parâmetro `status`, a lista traz **todos os
+        status**. A resposta é paginada: o consumidor percorre "página a página" aumentando
+        `pagina` até `paginacao.tem_proxima` ser `false`.
+
+        Os relatos vêm ordenados do mais antigo para o mais recente (`criado_em`).
+
+        **Atenção para quem muda o status dos itens (por exemplo, a triagem).** A paginação
+        é **por número de página**. Se você processar e mudar o status dos itens enquanto
+        pagina com `status=novo`, os relatos restantes sobem de página e alguns são
+        pulados. Por isso, quem processa e muda o status deve **ler TODAS as páginas ANTES
+        de processar**. Para uma coleta incremental (como a do Airflow), use `criado_desde`.
+
+        Endpoint **protegido** por `bearerAuth` (chamada entre serviços).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filtra os relatos pelo status. Se omitido, traz todos os status.
+          required: false
+          schema:
+            $ref: '#/components/schemas/StatusRelato'
+        - name: criado_desde
+          in: query
+          description: Traz só os relatos criados a partir deste instante (inclusive).
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: '2026-11-04T00:00:00-03:00'
+        - name: pagina
+          in: query
+          description: Número da página, começando em 1.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+            example: 1
+        - name: tamanho
+          in: query
+          description: Quantidade de itens por página.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+            example: 50
+      responses:
+        '200':
+          description: Página de relatos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListaRelatos'
+              examples:
+                novos:
+                  summary: "status=novo: um relato de cada classe e um sem detecção, ainda sem triagem"
+                  value:
+                    itens:
+                      - id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                        criado_em: '2026-11-04T14:32:10-03:00'
+                        lat: -23.5505
+                        lon: -46.6333
+                        foto_url: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+                        descricao: Buraco grande na calçada em frente ao número 120.
+                        categoria: buraco
+                        confianca: 0.94
+                        fonte: app
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
+                      - id: 5d1c7e22-93aa-4b0e-b7c1-2e4f8a6d9c10
+                        criado_em: '2026-11-04T14:51:42-03:00'
+                        lat: -23.5489
+                        lon: -46.6388
+                        foto_url: https://fotos.exemplo.invalid/relatos/5d1c7e22.jpg
+                        descricao: Lajes soltas, quase caí. Falar com Maria no (11) 90000-0000.
+                        categoria: piso_danificado
+                        confianca: 0.88
+                        fonte: app
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
+                      - id: a47e90b5-6c3f-4d18-9a2b-7f1e3c5d8e22
+                        criado_em: '2026-11-04T15:08:03-03:00'
+                        lat: -23.5672
+                        lon: -46.6916
+                        foto_url: https://fotos.exemplo.invalid/relatos/a47e90b5.jpg
+                        descricao: Entulho de obra ocupando toda a calçada. CPF do morador 000.000.000-00.
+                        categoria: obstaculo
+                        confianca: 0.81
+                        fonte: app
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
+                      - id: c92d4f61-0b8e-47a3-a5d6-1e9b7f3a2c33
+                        criado_em: '2026-11-04T15:40:27-03:00'
+                        lat: -23.5649
+                        lon: -46.6952
+                        foto_url: https://fotos.exemplo.invalid/relatos/c92d4f61.jpg
+                        descricao: null
+                        categoria: veiculo_na_calcada
+                        confianca: 0.97
+                        fonte: robo
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
+                      - id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
+                        criado_em: '2026-11-04T16:05:51-03:00'
+                        lat: -23.5661
+                        lon: -46.6931
+                        foto_url: https://fotos.exemplo.invalid/relatos/e3a85c17.jpg
+                        descricao: Calçada com algo estranho, não sei explicar.
+                        categoria: null
+                        confianca: null
+                        fonte: app
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
+                    paginacao:
+                      pagina: 1
+                      tamanho: 5
+                      total_itens: 9
+                      total_paginas: 2
+                      tem_proxima: true
+                encaminhados:
+                  summary: "status=encaminhado ou posterior: subprefeitura e prioridade preenchidas"
+                  value:
+                    itens:
+                      - id: 7a2e5b90-4f13-4c68-b0d7-3c8a1e6f9d55
+                        criado_em: '2026-11-02T09:12:30-03:00'
+                        lat: -23.5503
+                        lon: -46.6339
+                        foto_url: https://fotos.exemplo.invalid/relatos/7a2e5b90.jpg
+                        descricao: Piso afundado perto do ponto de ônibus.
+                        categoria: piso_danificado
+                        confianca: 0.91
+                        fonte: app
+                        status: encaminhado
+                        confirmacoes: 4
+                        subprefeitura: Sé
+                        prioridade: alta
+                      - id: 9c4d1f08-5e27-4a39-8b6e-0d2f7a3c1b66
+                        criado_em: '2026-10-28T17:45:00-03:00'
+                        lat: -23.5668
+                        lon: -46.6925
+                        foto_url: https://fotos.exemplo.invalid/relatos/9c4d1f08.jpg
+                        descricao: null
+                        categoria: veiculo_na_calcada
+                        confianca: 0.95
+                        fonte: robo
+                        status: resolvido
+                        confirmacoes: 2
+                        subprefeitura: Pinheiros
+                        prioridade: media
+                    paginacao:
+                      pagina: 1
+                      tamanho: 50
+                      total_itens: 2
+                      total_paginas: 1
+                      tem_proxima: false
+                pagina_vazia:
+                  summary: Nenhum relato com o status pedido
+                  value:
+                    itens: []
+                    paginacao:
+                      pagina: 1
+                      tamanho: 50
+                      total_itens: 0
+                      total_paginas: 0
+                      tem_proxima: false
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+
+  /deteccoes:
+    post:
+      tags: [Deteccoes]
+      operationId: detectarProblemas
+      summary: Detecta problemas de calçada em uma imagem
+      description: |
+        Chamado pela **API** (ao criar um relato) e pela **triagem**. Recebe a imagem e
+        devolve a lista de problemas detectados, ordenada da maior para a menor
+        `confianca`. Uma lista vazia significa que nada foi detectado.
+
+        **Formato da `caixa`** (decisão do projeto): `{x, y, largura, altura}`, todos
+        **normalizados de 0 a 1** em relação ao tamanho da imagem. `x` e `y` são o canto
+        superior esquerdo da caixa. Quem treina o YOLO deve converter, porque o formato de
+        rótulo do YOLO usa o centro da caixa.
+
+        A imagem pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
+
+        Endpoint **protegido** por `bearerAuth` (chamada entre serviços).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NovaDeteccao'
+            encoding:
+              imagem:
+                contentType: image/jpeg, image/png
+            examples:
+              imagem:
+                summary: Imagem de uma calçada
+                value:
+                  imagem: calcada-pinheiros.jpg
+      responses:
+        '200':
+          description: Lista de detecções (pode ser vazia).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deteccao'
+              examples:
+                buraco:
+                  summary: Um buraco
+                  value:
+                    - classe: buraco
+                      confianca: 0.94
+                      caixa: {x: 0.31, y: 0.58, largura: 0.22, altura: 0.17}
+                piso_danificado:
+                  summary: Piso danificado
+                  value:
+                    - classe: piso_danificado
+                      confianca: 0.88
+                      caixa: {x: 0.12, y: 0.64, largura: 0.48, altura: 0.25}
+                obstaculo:
+                  summary: Obstáculo
+                  value:
+                    - classe: obstaculo
+                      confianca: 0.81
+                      caixa: {x: 0.40, y: 0.30, largura: 0.35, altura: 0.52}
+                veiculo_na_calcada:
+                  summary: Veículo na calçada
+                  value:
+                    - classe: veiculo_na_calcada
+                      confianca: 0.97
+                      caixa: {x: 0.05, y: 0.22, largura: 0.71, altura: 0.60}
+                varias:
+                  summary: Mais de um problema na mesma imagem
+                  value:
+                    - classe: veiculo_na_calcada
+                      confianca: 0.97
+                      caixa: {x: 0.05, y: 0.22, largura: 0.71, altura: 0.60}
+                    - classe: piso_danificado
+                      confianca: 0.63
+                      caixa: {x: 0.60, y: 0.78, largura: 0.30, altura: 0.18}
+                nada_detectado:
+                  summary: Nada detectado
+                  value: []
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '413':
+          $ref: '#/components/responses/ArquivoGrande'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /assistente:
+    post:
+      tags: [Assistente]
+      operationId: perguntarAoAssistente
+      summary: Pergunta ao assistente do pedestre
+      description: |
+        Chamado pelo **app**. O assistente (LLM local com RAG) responde sobre quem é
+        responsável por consertar um problema de calçada e como reclamar, sempre citando
+        as `fontes`. Perguntas fora desse escopo, ou sem base nas fontes, são recusadas
+        com `recusou: true`.
+
+        Endpoint **público** (decisão provisória, ver a introdução do contrato). Os
+        textos dos exemplos são ilustrativos, não orientação oficial.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerguntaAssistente'
+            examples:
+              com_fontes:
+                summary: Pergunta dentro do escopo
+                value:
+                  pergunta: Quem conserta uma calçada quebrada em frente ao meu prédio?
+              recusa:
+                summary: Pergunta fora do escopo
+                value:
+                  pergunta: Qual a melhor ação para investir esse mês?
+      responses:
+        '200':
+          description: Resposta do assistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaAssistente'
+              examples:
+                com_fontes:
+                  summary: Respondeu, com fontes (recusou false)
+                  value:
+                    resposta: Em geral, o cuidado com o piso da calçada é de quem é dono do imóvel em frente. Se o problema for na área pública ou causado por obra de concessionária, a subprefeitura da região pode ser acionada pelo canal 156. Registre o problema aqui para acompanhar o caso.
+                    fontes:
+                      - titulo: Cartilha de calçadas da subprefeitura (exemplo)
+                        url: https://documentos.exemplo.invalid/cartilha-calcadas.pdf
+                    confianca: 0.86
+                    recusou: false
+                recusa:
+                  summary: Recusou responder (recusou true)
+                  value:
+                    resposta: Eu só consigo ajudar com problemas em calçadas de São Paulo, como quem conserta e como reclamar. Não tenho como responder sobre investimentos.
+                    fontes: []
+                    confianca: 0.1
+                    recusou: true
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /painel:
+    get:
+      tags: [Painel]
+      operationId: obterPainel
+      summary: Prioridades por subprefeitura
+      description: |
+        Chamado pelo **app**. Devolve as prioridades por subprefeitura, lidas da view
+        `vw_prioridades` da camada Ouro, exportada pelo pipeline de dados para a API. Os
+        itens vêm ordenados da maior para a menor prioridade.
+
+        Endpoint **público** (decisão provisória, ver a introdução do contrato).
+      security: []
+      responses:
+        '200':
+          description: Prioridades por subprefeitura.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrioridadeSubprefeitura'
+              examples:
+                se_e_pinheiros:
+                  summary: Sé e Pinheiros
+                  value:
+                    - subprefeitura: Sé
+                      prioridade: alta
+                      relatos_abertos: 69
+                      relatos_por_categoria:
+                        buraco: 12
+                        piso_danificado: 31
+                        obstaculo: 9
+                        veiculo_na_calcada: 17
+                      tempo_medio_ate_reparo_dias: 41.5
+                      atualizado_em: '2026-11-04T06:00:00-03:00'
+                    - subprefeitura: Pinheiros
+                      prioridade: media
+                      relatos_abertos: 38
+                      relatos_por_categoria:
+                        buraco: 5
+                        piso_danificado: 14
+                        obstaculo: 11
+                        veiculo_na_calcada: 8
+                      tempo_medio_ate_reparo_dias: null
+                      atualizado_em: '2026-11-04T06:00:00-03:00'
+        '404':
+          description: Ainda não há painel disponível, porque o pipeline não exportou a view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              examples:
+                sem_painel:
+                  value:
+                    codigo: painel_indisponivel
+                    mensagem: O painel de prioridades ainda não foi exportado pelo pipeline de dados.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Token enviado em `Authorization: Bearer <token>`. Usado apenas nas chamadas entre
+        serviços (`GET /relatos` e `POST /deteccoes`). Decisão provisória; nenhum token
+        real é versionado no repositório.
+
+  responses:
+    RequisicaoInvalida:
+      description: Requisição malformada, por exemplo parâmetro de consulta inválido ou corpo que não é do tipo esperado.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            parametro_invalido:
+              value:
+                codigo: requisicao_invalida
+                mensagem: A requisição está malformada.
+                detalhes:
+                  - campo: tamanho
+                    problema: deve ser um inteiro entre 1 e 100
+    DadosInvalidos:
+      description: A requisição está bem formada, mas os dados não passam na validação. Por exemplo, coordenadas fora do município de São Paulo, imagem ilegível ou pergunta vazia.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            dados_invalidos:
+              value:
+                codigo: dados_invalidos
+                mensagem: Os dados enviados não são válidos.
+                detalhes:
+                  - campo: lat
+                    problema: deve estar entre -90 e 90
+    ArquivoGrande:
+      description: O arquivo enviado passa do tamanho máximo de 10 MB (decisão provisória).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            arquivo_grande:
+              value:
+                codigo: arquivo_grande
+                mensagem: O arquivo enviado passa do tamanho máximo de 10 MB.
+    NaoAutenticado:
+      description: Token ausente ou inválido. Este endpoint é uma chamada entre serviços e exige `bearerAuth`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            sem_token:
+              value:
+                codigo: nao_autenticado
+                mensagem: Token ausente ou inválido.
+
+  schemas:
+    Categoria:
+      type: string
+      description: |
+        Classe do problema de calçada. Os valores e a ordem vêm de `contratos/classes.yaml`
+        (fonte única de verdade). A posição na lista é o índice da classe no YOLO.
+      enum:
+        - buraco
+        - piso_danificado
+        - obstaculo
+        - veiculo_na_calcada
+      example: buraco
+
+    StatusRelato:
+      type: string
+      description: |
+        Etapa do relato. Fluxo normal: `novo` → `revisao_humana` → `validado` →
+        `encaminhado` → `resolvido`. Um relato também pode terminar em `rejeitado`.
+
+        A API sempre cria o relato como `novo`. As mudanças seguintes são feitas pela
+        triagem, por exemplo "confiança menor que 0,5 → `revisao_humana`".
+      enum:
+        - novo
+        - revisao_humana
+        - validado
+        - encaminhado
+        - resolvido
+        - rejeitado
+      example: novo
+
+    Prioridade:
+      type: string
+      description: Prioridade de atendimento.
+      enum:
+        - alta
+        - media
+        - baixa
+      example: alta
+
+    FonteRelato:
+      type: string
+      description: Quem originou o relato.
+      enum:
+        - app
+        - robo
+      example: app
+
+    Confianca:
+      type: number
+      minimum: 0
+      maximum: 1
+      description: Confiança, de 0 a 1.
+      example: 0.94
+
+    CategoriaOuNula:
+      description: |
+        Mesma `Categoria`, ou `null` quando o serviço de visão não detectou nada. Só vale
+        para `Relato` e `RelatoCriado`; em `Deteccao` a classe nunca é nula.
+      oneOf:
+        - $ref: '#/components/schemas/Categoria'
+        - type: 'null'
+      example: buraco
+
+    ConfiancaOuNula:
+      description: |
+        Confiança de 0 a 1, ou `null` quando o serviço de visão não detectou nada. Só vale
+        para `Relato` e `RelatoCriado`; em `Deteccao` a confiança nunca é nula.
+      oneOf:
+        - $ref: '#/components/schemas/Confianca'
+        - type: 'null'
+      example: 0.94
+
+    Relato:
+      type: object
+      description: Um relato de problema em calçada.
+      required:
+        - id
+        - criado_em
+        - lat
+        - lon
+        - foto_url
+        - categoria
+        - confianca
+        - fonte
+        - status
+        - confirmacoes
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador do relato.
+          example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+        criado_em:
+          type: string
+          format: date-time
+          description: Quando o relato foi criado.
+          example: '2026-11-04T14:32:10-03:00'
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          description: Latitude em graus decimais.
+          example: -23.5505
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+          description: Longitude em graus decimais.
+          example: -46.6333
+        foto_url:
+          type: string
+          format: uri
+          description: Endereço da foto do relato.
+          example: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+        descricao:
+          type:
+            - string
+            - 'null'
+          maxLength: 1000
+          description: |
+            Texto livre do cidadão; pode ser nulo. **Pode conter telefone ou CPF**, que a
+            triagem mascara depois.
+          example: Buraco grande na calçada em frente ao número 120.
+        categoria:
+          $ref: '#/components/schemas/CategoriaOuNula'
+        confianca:
+          $ref: '#/components/schemas/ConfiancaOuNula'
+        fonte:
+          $ref: '#/components/schemas/FonteRelato'
+        status:
+          $ref: '#/components/schemas/StatusRelato'
+        confirmacoes:
+          type: integer
+          minimum: 0
+          description: Quantas pessoas confirmaram o mesmo problema. Começa em 0.
+          example: 3
+        subprefeitura:
+          type:
+            - string
+            - 'null'
+          description: |
+            Subprefeitura responsável pelo local. Nula enquanto o relato está `novo`; fica
+            preenchida a partir de `encaminhado`.
+          example: Sé
+        prioridade:
+          description: |
+            Prioridade de atendimento. Nula enquanto o relato está `novo`; fica preenchida
+            a partir de `encaminhado`.
+          oneOf:
+            - $ref: '#/components/schemas/Prioridade'
+            - type: 'null'
+          example: alta
+
+    NovoRelato:
+      type: object
+      description: Corpo `multipart/form-data` de `POST /relatos`.
+      required:
+        - foto
+        - lat
+        - lon
+        - fonte
+      properties:
+        foto:
+          type: string
+          format: binary
+          description: Arquivo da foto (JPEG ou PNG), de no máximo 10 MB (decisão provisória).
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          description: Latitude em graus decimais.
+          example: -23.5505
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+          description: Longitude em graus decimais.
+          example: -46.6333
+        descricao:
+          type: string
+          maxLength: 1000
+          description: Texto livre opcional. Pode conter telefone ou CPF digitado pelo cidadão.
+          example: Buraco grande na calçada em frente ao número 120.
+        fonte:
+          $ref: '#/components/schemas/FonteRelato'
+
+    RelatoCriado:
+      type: object
+      description: Resposta de `POST /relatos`.
+      required:
+        - id
+        - categoria
+        - confianca
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador do relato criado.
+          example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+        categoria:
+          $ref: '#/components/schemas/CategoriaOuNula'
+        confianca:
+          $ref: '#/components/schemas/ConfiancaOuNula'
+        status:
+          type: string
+          const: novo
+          description: A API sempre cria o relato como `novo`.
+          example: novo
+
+    NovaDeteccao:
+      type: object
+      description: Corpo `multipart/form-data` de `POST /deteccoes`.
+      required:
+        - imagem
+      properties:
+        imagem:
+          type: string
+          format: binary
+          description: Arquivo da imagem (JPEG ou PNG), de no máximo 10 MB (decisão provisória).
+
+    Caixa:
+      type: object
+      description: |
+        Caixa delimitadora **normalizada de 0 a 1** em relação à largura e à altura da
+        imagem. `x` e `y` são o canto superior esquerdo.
+      required:
+        - x
+        - y
+        - largura
+        - altura
+      properties:
+        x:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Posição horizontal do canto superior esquerdo.
+          example: 0.31
+        y:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Posição vertical do canto superior esquerdo.
+          example: 0.58
+        largura:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Largura da caixa.
+          example: 0.22
+        altura:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Altura da caixa.
+          example: 0.17
+
+    Deteccao:
+      type: object
+      description: Um problema detectado em uma imagem.
+      required:
+        - classe
+        - confianca
+        - caixa
+      properties:
+        classe:
+          $ref: '#/components/schemas/Categoria'
+        confianca:
+          $ref: '#/components/schemas/Confianca'
+        caixa:
+          $ref: '#/components/schemas/Caixa'
+      example:
+        classe: buraco
+        confianca: 0.94
+        caixa: {x: 0.31, y: 0.58, largura: 0.22, altura: 0.17}
+
+    PerguntaAssistente:
+      type: object
+      description: Corpo de `POST /assistente`.
+      required:
+        - pergunta
+      properties:
+        pergunta:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Pergunta do pedestre, em texto livre.
+          example: Quem conserta uma calçada quebrada em frente ao meu prédio?
+
+    FonteCitada:
+      type: object
+      description: Documento em que o assistente se baseou.
+      required:
+        - titulo
+      properties:
+        titulo:
+          type: string
+          description: Título do documento.
+          example: Cartilha de calçadas da subprefeitura (exemplo)
+        url:
+          type: string
+          format: uri
+          description: Endereço do documento, quando houver.
+          example: https://documentos.exemplo.invalid/cartilha-calcadas.pdf
+
+    RespostaAssistente:
+      type: object
+      description: Resposta de `POST /assistente`.
+      required:
+        - resposta
+        - fontes
+        - confianca
+        - recusou
+      properties:
+        resposta:
+          type: string
+          description: Texto da resposta, ou a explicação da recusa.
+          example: Em geral, o cuidado com o piso da calçada é de quem é dono do imóvel em frente. Registre o problema aqui para acompanhar o caso.
+        fontes:
+          type: array
+          description: Documentos citados. Fica vazio quando `recusou` é `true`.
+          items:
+            $ref: '#/components/schemas/FonteCitada'
+        confianca:
+          $ref: '#/components/schemas/Confianca'
+        recusou:
+          type: boolean
+          description: '`true` quando o assistente se recusou a responder, por estar fora do escopo ou sem base nas fontes.'
+          example: false
+
+    PrioridadeSubprefeitura:
+      type: object
+      description: Linha da view `vw_prioridades` (camada Ouro), por subprefeitura.
+      required:
+        - subprefeitura
+        - prioridade
+        - relatos_abertos
+        - relatos_por_categoria
+        - atualizado_em
+      properties:
+        subprefeitura:
+          type: string
+          example: Sé
+        prioridade:
+          $ref: '#/components/schemas/Prioridade'
+        relatos_abertos:
+          type: integer
+          minimum: 0
+          description: Relatos ainda não resolvidos nem rejeitados.
+          example: 69
+        relatos_por_categoria:
+          type: object
+          description: Relatos abertos por classe de problema.
+          propertyNames:
+            $ref: '#/components/schemas/Categoria'
+          additionalProperties:
+            type: integer
+            minimum: 0
+          example:
+            buraco: 12
+            piso_danificado: 31
+            obstaculo: 9
+            veiculo_na_calcada: 17
+        tempo_medio_ate_reparo_dias:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          description: Tempo médio até o reparo, em dias; nulo quando ainda não há reparos.
+          example: 41.5
+        atualizado_em:
+          type: string
+          format: date-time
+          description: Quando o pipeline exportou os dados.
+          example: '2026-11-04T06:00:00-03:00'
+
+    Paginacao:
+      type: object
+      description: Informações de paginação.
+      required:
+        - pagina
+        - tamanho
+        - total_itens
+        - total_paginas
+        - tem_proxima
+      properties:
+        pagina:
+          type: integer
+          minimum: 1
+          description: Página atual.
+          example: 1
+        tamanho:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Itens por página usados nesta resposta.
+          example: 50
+        total_itens:
+          type: integer
+          minimum: 0
+          description: Total de itens que atendem ao filtro.
+          example: 9
+        total_paginas:
+          type: integer
+          minimum: 0
+          description: Total de páginas.
+          example: 1
+        tem_proxima:
+          type: boolean
+          description: '`true` se existe uma página seguinte.'
+          example: false
+
+    ListaRelatos:
+      type: object
+      description: Página de relatos.
+      required:
+        - itens
+        - paginacao
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relato'
+        paginacao:
+          $ref: '#/components/schemas/Paginacao'
+
+    DetalheErro:
+      type: object
+      description: Problema encontrado em um campo.
+      required:
+        - campo
+        - problema
+      properties:
+        campo:
+          type: string
+          example: lat
+        problema:
+          type: string
+          example: deve estar entre -90 e 90
+
+    Erro:
+      type: object
+      description: Formato único de erro da API.
+      required:
+        - codigo
+        - mensagem
+      properties:
+        codigo:
+          type: string
+          description: Código estável do erro, em `snake_case`.
+          example: dados_invalidos
+        mensagem:
+          type: string
+          description: Explicação legível.
+          example: Os dados enviados não são válidos.
+        detalhes:
+          type: array
+          description: Problemas por campo, quando houver.
+          items:
+            $ref: '#/components/schemas/DetalheErro'
