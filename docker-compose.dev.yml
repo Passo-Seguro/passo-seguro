@@ -44,12 +44,20 @@ services:
       USE_FAKE_VISAO: ${USE_FAKE_VISAO:-true}
       VISAO_URL: ${VISAO_URL:-}
       VISAO_TOKEN: ${VISAO_TOKEN:-}
+      # Assistente: sem o serviço real, usa respostas fixas de exemplo. Para o real:
+      # USE_FAKE_ASSISTENTE=false ASSISTENTE_URL=http://host:porta
+      USE_FAKE_ASSISTENTE: ${USE_FAKE_ASSISTENTE:-true}
+      ASSISTENTE_URL: ${ASSISTENTE_URL:-}
+      ASSISTENTE_TOKEN: ${ASSISTENTE_TOKEN:-}
+      # Painel: arquivo exportado pelo pipeline de dados. Aqui, um exemplo fictício do repositório.
+      PAINEL_EXPORT_PATH: /data/painel/vw_prioridades.json
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - fotos:/data/fotos
+      - ./docs/exemplos/vw_prioridades.json:/data/painel/vw_prioridades.json:ro
     command:
       - sh
       - -c
