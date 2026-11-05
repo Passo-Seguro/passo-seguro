@@ -172,7 +172,7 @@ Os tokens do compose são **fictícios** e só valem para desenvolvimento. Vari�
 
 ```bash
 cd api
-python -m venv .venv && source .venv/bin/activate      # no Windows: .venv\Scriptsctivate
+python -m venv .venv && source .venv/bin/activate      # no Windows: .venv/Scripts/activate
 pip install -r requirements.txt -r requirements-dev.txt
 pytest                                                  # testes
 ruff check . && ruff format --check .                   # estilo
