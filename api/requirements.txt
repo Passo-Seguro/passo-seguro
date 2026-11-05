@@ -46,6 +46,8 @@ packaging==26.3
     # via geoalchemy2
 pillow==13.0.0
     # via -r requirements.in
+prometheus-client==0.26.0
+    # via -r requirements.in
 psycopg==3.3.8
     # via -r requirements.in
 psycopg-binary==3.3.8

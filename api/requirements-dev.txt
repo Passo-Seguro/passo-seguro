@@ -4,10 +4,65 @@
 #
 #    pip-compile --output-file=requirements-dev.txt --strip-extras requirements-dev.in
 #
+anyio==4.16.0
+    # via
+    #   -c requirements.txt
+    #   httpx
+    #   schemathesis
+certifi==2026.10.23
+    # via
+    #   -c requirements.txt
+    #   httpcore
+    #   httpx
+    #   requests
+charset-normalizer==3.5.2
+    # via requests
+click==8.5.0
+    # via
+    #   -c requirements.txt
+    #   schemathesis
 colorama==0.4.6
     # via pytest
+graphql-core==3.3.1
+    # via hypothesis-graphql
+h11==0.16.0
+    # via
+    #   -c requirements.txt
+    #   httpcore
+harfile==0.6.0
+    # via schemathesis
+httpcore==1.0.9
+    # via
+    #   -c requirements.txt
+    #   httpx
+httpx==0.28.1
+    # via
+    #   -c requirements.txt
+    #   respx
+hypothesis==6.170.14
+    # via
+    #   hypothesis-graphql
+    #   schemathesis
+hypothesis-graphql==0.13.6
+    # via schemathesis
+idna==3.20
+    # via
+    #   -c requirements.txt
+    #   anyio
+    #   httpx
+    #   requests
 iniconfig==2.3.1
     # via pytest
+jsonschema-rs==0.60.3
+    # via schemathesis
+markdown-it-py==4.2.0
+    # via rich
+markupsafe==3.0.4
+    # via
+    #   -c requirements.txt
+    #   werkzeug
+mdurl==0.1.2
+    # via markdown-it-py
 packaging==26.3
     # via
     #   -c requirements.txt
@@ -15,10 +70,37 @@ packaging==26.3
 pluggy==1.7.0
     # via pytest
 pygments==2.21.0
-    # via pytest
+    # via
+    #   pytest
+    #   rich
+pyrate-limiter==4.5.1
+    # via schemathesis
 pytest==9.2.0
-    # via -r requirements-dev.in
+    # via
+    #   -r requirements-dev.in
+    #   schemathesis
 pyyaml==6.0.3
+    # via
+    #   -r requirements-dev.in
+    #   schemathesis
+requests==2.34.2
+    # via schemathesis
+respx==0.23.1
     # via -r requirements-dev.in
+rich==15.0.0
+    # via schemathesis
 ruff==0.17.3
     # via -r requirements-dev.in
+schemathesis==4.33.1
+    # via -r requirements-dev.in
+sortedcontainers==2.4.0
+    # via hypothesis
+typing-extensions==4.16.0
+    # via
+    #   -c requirements.txt
+    #   anyio
+    #   schemathesis
+urllib3==2.8.0
+    # via requests
+werkzeug==3.1.9
+    # via schemathesis
