@@ -108,7 +108,7 @@ def test_proximos_parametros_invalidos_400(client_rc2, params):
 
 def test_proximos_fora_de_sao_paulo_422(client_rc2):
     r = client_rc2.get("/relatos/proximos", params={"lat": -22.9, "lon": -43.2})
-    assert r.status_code == 422 and r.json()["codigo"] == "dados_invalidos"
+    assert r.status_code == 422 and r.json()["codigo"] == "fora_da_area"
 
 
 # =========================== GET /meus-relatos ===========================

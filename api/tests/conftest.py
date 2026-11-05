@@ -116,6 +116,7 @@ def criar_relato_db(fabrica_sessao):
         prioridade: str | None = None,
         confirmacoes: int = 0,
         simulado: bool = False,
+        modo_deteccao: str = "nenhuma",
         id: uuid.UUID | None = None,
     ) -> uuid.UUID:
         relato_id = id or uuid.uuid4()
@@ -136,6 +137,7 @@ def criar_relato_db(fabrica_sessao):
                     prioridade=prioridade,
                     autor_hash=autor_hash,
                     simulado=simulado,
+                    modo_deteccao=modo_deteccao,
                 )
             )
             sessao.commit()

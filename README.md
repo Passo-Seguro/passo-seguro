@@ -198,6 +198,8 @@ As dependências têm versões fixas em `api/requirements.txt` e `api/requiremen
 
 **Relatos simulados** para o mapa não começar vazio: [`docs/dados-simulados.md`](./docs/dados-simulados.md).
 
+**Relatos criados sob visão fake:** a coluna interna `relatos.modo_deteccao` (`real`, `fake` ou `nenhuma`) separa o que veio do modelo do que veio do detector de mentira; consulta e limpeza em [`docs/modo-deteccao.md`](./docs/modo-deteccao.md).
+
 ## Licença
 
 A definir.

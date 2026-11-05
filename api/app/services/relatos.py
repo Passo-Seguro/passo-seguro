@@ -9,7 +9,7 @@ from sqlalchemy import Select, cast, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Relato
-from app.dominio import StatusRelato
+from app.dominio import ModoDeteccao, StatusRelato
 from app.schemas.relatos import Relato as RelatoSchema
 from app.storage import Armazenamento
 
@@ -50,6 +50,7 @@ def criar(
     categoria: str | None,
     confianca: float | None,
     autor_hash: str | None,
+    modo_deteccao: ModoDeteccao = ModoDeteccao.NENHUMA,
 ) -> Relato:
     """Insere o relato SEMPRE com status `novo` (a regra de revisão por confiança é da triagem)."""
     relato = Relato(
@@ -64,6 +65,7 @@ def criar(
         confirmacoes=0,
         autor_hash=autor_hash,
         simulado=False,
+        modo_deteccao=modo_deteccao.value,
     )
     db.add(relato)
     db.commit()

@@ -16,7 +16,7 @@ import httpx
 from pydantic import TypeAdapter, ValidationError
 
 from app.config import Settings
-from app.dominio import Categoria
+from app.dominio import Categoria, ModoDeteccao
 from app.schemas.deteccoes import Caixa, Deteccao
 
 log = logging.getLogger("passo_seguro.visao")
@@ -30,6 +30,9 @@ class VisaoIndisponivel(Exception):
 
 
 class ClienteVisao(Protocol):
+    # Quem respondeu, gravado em `relatos.modo_deteccao` quando houver detecção.
+    modo: ModoDeteccao
+
     def detectar(self, imagem: bytes, content_type: str) -> list[Deteccao]:
         """Devolve as detecções, da maior para a menor confiança (lista vazia = nada)."""
 
@@ -40,6 +43,8 @@ class VisaoFalsa:
     Serve para desenvolvimento e para demonstração quando o serviço de visão real não está
     no ar. A classe vem do hash da imagem, ou seja, NÃO olha para a foto de verdade.
     """
+
+    modo = ModoDeteccao.FAKE
 
     def detectar(self, imagem: bytes, content_type: str) -> list[Deteccao]:
         h = hashlib.sha256(imagem).digest()
@@ -55,12 +60,16 @@ class VisaoFalsa:
 class VisaoForaDoAr:
     """Sem serviço de visão configurado: toda chamada falha como 'indisponível'."""
 
+    modo = ModoDeteccao.NENHUMA
+
     def detectar(self, imagem: bytes, content_type: str) -> list[Deteccao]:
         raise VisaoIndisponivel("serviço de visão não configurado")
 
 
 class VisaoHttp:
     """Chama `POST {url}/deteccoes` (multipart, campo `imagem`) do serviço de visão."""
+
+    modo = ModoDeteccao.REAL
 
     def __init__(self, base_url: str, token: str = "", timeout_s: float = 5.0, cliente: httpx.Client | None = None):
         self.base_url = base_url.rstrip("/")
