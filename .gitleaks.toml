@@ -10,5 +10,6 @@ useDefault = true
 description = "Tokens de exemplo fictícios (README, mock e docker-compose.dev.yml)"
 regexes = [
   '''token-ficticio''',
-  '''token-servico-dev''',
+  '''token-[a-z]+-dev''',
+  '''sal-de-desenvolvimento''',
 ]

@@ -33,6 +33,17 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://passo:${DB_PASSWORD:-passo-dev}@db:5432/passo_seguro
       SERVICE_TOKEN: ${SERVICE_TOKEN:-token-servico-dev}
+      DEVICE_TOKEN: ${DEVICE_TOKEN:-token-robo-dev}
+      METRICS_TOKEN: ${METRICS_TOKEN:-token-metricas-dev}
+      SALT_AUTOR: ${SALT_AUTOR:-sal-de-desenvolvimento}
+      # Emenda rc2 do contrato (autor_id, robô com token, /relatos/proximos, /meus-relatos, PATCH).
+      # Ligada aqui para o app poder desenvolver; no código o padrão é desligada até o grupo aprovar.
+      HABILITAR_RC2: ${HABILITAR_RC2:-true}
+      # Visão: sem o serviço real, usa a visão falsa (a classe sai do hash da imagem, não da foto).
+      # Para usar o serviço real: USE_FAKE_VISAO=false VISAO_URL=http://host:porta VISAO_TOKEN=...
+      USE_FAKE_VISAO: ${USE_FAKE_VISAO:-true}
+      VISAO_URL: ${VISAO_URL:-}
+      VISAO_TOKEN: ${VISAO_TOKEN:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:
