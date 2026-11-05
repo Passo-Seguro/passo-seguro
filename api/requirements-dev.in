@@ -1,0 +1,6 @@
+# Dependências DIRETAS de desenvolvimento e teste (somam-se às de requirements.txt).
+# Gerar o requirements-dev.txt com:  pip-compile --strip-extras requirements-dev.in
+-c requirements.txt
+pytest
+pyyaml
+ruff

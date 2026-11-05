@@ -1,0 +1,14 @@
+# Dependências DIRETAS de runtime da API.
+# O arquivo requirements.txt (com TODAS as versões fixas, inclusive as transitivas) é
+# gerado a partir deste com:  pip-compile --strip-extras requirements.in
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg[binary]
+geoalchemy2
+pydantic-settings
+python-multipart
+httpx
+pillow
+tzdata
