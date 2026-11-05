@@ -76,6 +76,7 @@ docker compose -f docker-compose.dev.yml exec -T db psql -U passo -d passo_segur
   -c "SELECT foto_chave FROM relatos WHERE modo_deteccao = 'fake' AND NOT simulado" > chaves-fake.txt
 
 # (rode o DELETE acima) e então:
+export MSYS_NO_PATHCONV=1   # só no Git Bash do Windows: sem isso ele reescreve /data/fotos e o rm não acha o arquivo
 while read -r chave; do
   docker compose -f docker-compose.dev.yml exec -T api rm -f "/data/fotos/$chave"
 done < chaves-fake.txt
