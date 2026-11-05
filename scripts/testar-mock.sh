@@ -65,6 +65,13 @@ checar "GET /relatos (sem bearer)" 401 '"nao_autenticado"' "$MOCK_URL/relatos"
 checar "POST /assistente" 200 '"recusou"' \
   -H 'Content-Type: application/json' -d '{"pergunta":"Quem conserta a calçada?"}' "$MOCK_URL/assistente"
 
+echo "==> Documentado na rc2: 503 (visão, painel) e assistente fora do ar"
+checar "POST /deteccoes 503 (visão fora do ar)" 503 '"visao_indisponivel"'   -H "Authorization: Bearer $TOKEN_FICTICIO" -H 'Prefer: code=503'   -F "imagem=@$FOTO_CURL;type=image/jpeg" "$MOCK_URL/deteccoes"
+checar "GET /painel 503 (arquivo inválido)" 503 '"painel_invalido"' -H 'Prefer: code=503' "$MOCK_URL/painel"
+checar "GET /painel 404 (sem arquivo)" 404 '"painel_indisponivel"' -H 'Prefer: code=404' "$MOCK_URL/painel"
+checar "POST /assistente fora do ar (recusa + SP156)" 200 'sp156.prefeitura.sp.gov.br'   -H 'Content-Type: application/json' -H 'Prefer: example=assistente_fora_do_ar'   -d '{"pergunta":"Quem conserta a calcada?"}' "$MOCK_URL/assistente"
+checar "POST /relatos 422 fora de SP" 422 'fora da área de atendimento'   -H 'Prefer: code=422, example=fora_da_area'   -F "foto=@$FOTO_CURL;type=image/jpeg" -F lat=-22.9 -F lon=-43.2 -F fonte=app "$MOCK_URL/relatos"
+
 echo "==> Emenda rc2: POST /relatos (autor_id e X-Device-Token)"
 checar "POST /relatos app com autor_id" 201 '"status":"novo"' \
   -F "foto=@$FOTO_CURL;type=image/jpeg" -F lat=-23.5505 -F lon=-46.6333 -F fonte=app \
