@@ -1,0 +1,11 @@
+# Configuração do lint do contrato (usada por scripts/validar-contratos.sh).
+# "recommended-strict" transforma os avisos em erros: o contrato precisa estar limpo.
+extends:
+  - recommended-strict
+
+rules:
+  # A licença do projeto ainda está "A definir" (ver README).
+  info-license: off
+  info-license-strict: off
+  # O único servidor declarado é o mock local; ainda não existe URL de produção.
+  no-server-example.com: off
