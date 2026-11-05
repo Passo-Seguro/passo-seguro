@@ -7,8 +7,11 @@
 # Dicas:
 #   - Escolher um exemplo:           curl -H 'Prefer: example=obstaculo' ...
 #   - Escolher um código de resposta: curl -H 'Prefer: code=422' ...
-#   - Endpoints protegidos (GET /relatos, POST /deteccoes) exigem
+#   - Endpoints protegidos (GET /relatos, POST /deteccoes, PATCH /relatos/{id} da triagem) exigem
 #     'Authorization: Bearer <qualquer-valor>' (use um valor fictício; não coloque tokens reais).
+#   - PATCH /relatos/{id} no modo app aceita 'X-Autor-Id: <uuid>' no lugar do bearer.
+#   - GET /meus-relatos exige o cabeçalho 'X-Autor-Id: <uuid>'.
+#   - Bateria de curls contra o mock: scripts/testar-mock.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
