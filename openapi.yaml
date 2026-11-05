@@ -16,6 +16,12 @@ info:
     `autor_id` opcional em `POST /relatos`; cabeçalho `X-Device-Token` para o robô;
     novos `GET /relatos/proximos`, `GET /meus-relatos` e `PATCH /relatos/{id}`.
 
+    **Também documentado na rc2 (já é o comportamento da API):** `503` em `POST /deteccoes`
+    (`visao_indisponivel`) e em `GET /painel` (`painel_invalido`); o limite de itens das
+    listas `GET /relatos/proximos` (1000) e `GET /meus-relatos` (100); a resposta do
+    `POST /assistente` quando o assistente está fora do ar; e o 422 de localização fora de
+    São Paulo, com exemplo.
+
     ## Convenções
 
     - Textos em português; campos em `snake_case`, sem acento.
@@ -198,7 +204,10 @@ paths:
         status**. A resposta é paginada: o consumidor percorre "página a página" aumentando
         `pagina` até `paginacao.tem_proxima` ser `false`.
 
-        Os relatos vêm ordenados do mais antigo para o mais recente (`criado_em`).
+        Os relatos vêm ordenados do mais antigo para o mais recente (`criado_em`; o `id`
+        desempata). Uma `pagina` além do fim devolve `itens: []` (não é erro). `criado_desde`
+        precisa ser ISO 8601 **com fuso** (`2026-11-04T00:00:00-03:00` ou `...Z`); sem fuso ou em
+        outro formato, 400.
 
         **Atenção para quem muda o status dos itens (por exemplo, a triagem).** A paginação
         é **por número de página**. Se você processar e mudar o status dos itens enquanto
@@ -391,7 +400,8 @@ paths:
         decimais** (cerca de 100 m). A localização exata nunca sai por este endpoint. A
         busca em si usa a localização exata guardada.
 
-        A ordem dos itens é do mais próximo para o mais distante.
+        A ordem dos itens é do mais próximo para o mais distante. A resposta traz no máximo
+        **1000** relatos (os 1000 mais próximos); para ver menos, diminua `raio_m`.
 
         Endpoint **público** (decisão provisória, ver a introdução do contrato).
       security: []
@@ -431,6 +441,7 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 1000
                 items:
                   $ref: '#/components/schemas/RelatoProximo'
               examples:
@@ -601,6 +612,7 @@ paths:
             application/json:
               schema:
                 type: array
+                maxItems: 100
                 items:
                   $ref: '#/components/schemas/RelatoResumo'
               examples:
@@ -651,6 +663,10 @@ paths:
         rótulo do YOLO usa o centro da caixa.
 
         A imagem pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
+
+        Se o **serviço de visão** estiver fora do ar (não respondeu, deu erro ou devolveu
+        algo fora deste contrato), a API responde **503** `visao_indisponivel`. Em
+        `POST /relatos` isso não é erro: o relato é criado com `categoria` e `confianca` nulas.
 
         Endpoint **protegido** por `bearerAuth` (chamada entre serviços).
       security:
@@ -723,6 +739,8 @@ paths:
           $ref: '#/components/responses/ArquivoGrande'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
+        '503':
+          $ref: '#/components/responses/VisaoIndisponivel'
 
   /assistente:
     post:
@@ -734,6 +752,11 @@ paths:
         responsável por consertar um problema de calçada e como reclamar, sempre citando
         as `fontes`. Perguntas fora desse escopo, ou sem base nas fontes, são recusadas
         com `recusou: true`.
+
+        **Assistente fora do ar.** Se o serviço do assistente não responder, der erro ou
+        devolver algo fora deste contrato, a API **não devolve erro**: responde 200 com
+        `recusou: true`, `fontes: []`, `confianca: 0` e uma mensagem padrão com o telefone 156 e
+        o link do portal SP156. O app continua funcionando.
 
         Endpoint **público** (decisão provisória, ver a introdução do contrato). Os
         textos dos exemplos são ilustrativos, não orientação oficial.
@@ -777,6 +800,13 @@ paths:
                     fontes: []
                     confianca: 0.1
                     recusou: true
+                assistente_fora_do_ar:
+                  summary: Assistente fora do ar (recusou true, mensagem padrão com o SP156)
+                  value:
+                    resposta: "O assistente não está disponível agora. Você ainda pode registrar o problema aqui no Passo Seguro e, para falar com a Prefeitura, ligue 156 ou acesse o SP156: https://sp156.prefeitura.sp.gov.br/"
+                    fontes: []
+                    confianca: 0
+                    recusou: true
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
         '422':
@@ -791,6 +821,9 @@ paths:
         Chamado pelo **app**. Devolve as prioridades por subprefeitura, lidas da view
         `vw_prioridades` da camada Ouro, exportada pelo pipeline de dados para a API. Os
         itens vêm ordenados da maior para a menor prioridade.
+
+        Se o arquivo exportado existir mas estiver fora deste schema, a API responde **503**
+        `painel_invalido` (e não repassa o conteúdo). Sem arquivo, 404.
 
         Endpoint **público** (decisão provisória, ver a introdução do contrato).
       security: []
@@ -838,6 +871,8 @@ paths:
                   value:
                     codigo: painel_indisponivel
                     mensagem: O painel de prioridades ainda não foi exportado pelo pipeline de dados.
+        '503':
+          $ref: '#/components/responses/PainelInvalido'
 
 components:
   securitySchemes:
@@ -892,6 +927,36 @@ components:
                 detalhes:
                   - campo: lat
                     problema: deve estar entre -90 e 90
+            fora_da_area:
+              summary: Localização fora de São Paulo (o app deve pedir para tocar no mapa dentro da cidade)
+              value:
+                codigo: dados_invalidos
+                mensagem: Os dados enviados não são válidos.
+                detalhes:
+                  - campo: lat
+                    problema: a localização está fora da área de atendimento (município de São Paulo)
+    VisaoIndisponivel:
+      description: O serviço de visão está fora do ar (não respondeu, deu erro ou devolveu algo fora do contrato).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            visao_indisponivel:
+              value:
+                codigo: visao_indisponivel
+                mensagem: O serviço de visão está indisponível no momento.
+    PainelInvalido:
+      description: O arquivo do painel exportado pelo pipeline de dados existe, mas está fora do schema (ou ilegível).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            painel_invalido:
+              value:
+                codigo: painel_invalido
+                mensagem: O arquivo do painel exportado pelo pipeline de dados está inválido.
     ArquivoGrande:
       description: O arquivo enviado passa do tamanho máximo de 10 MB (decisão provisória).
       content:
