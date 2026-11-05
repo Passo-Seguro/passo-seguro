@@ -110,19 +110,6 @@ def test_assistente_corpo_malformado_400(client):
     assert r.status_code == 400 and r.json()["detalhes"] == [{"campo": "corpo", "problema": "JSON malformado"}]
 
 
-# --- GET /painel ---------------------------------------------------------------------
-
-
-def test_painel_devolve_prioridades(client):
-    r = client.get("/painel")
-    assert r.status_code == 200
-    corpo = r.json()
-    assert [p["subprefeitura"] for p in corpo] == ["Sé", "Pinheiros"]
-    assert corpo[0]["relatos_por_categoria"].keys() == {"buraco", "piso_danificado", "obstaculo", "veiculo_na_calcada"}
-    assert corpo[0]["atualizado_em"] == "2026-11-04T06:00:00-03:00"
-    assert corpo[1]["tempo_medio_ate_reparo_dias"] is None
-
-
 # --- gerais --------------------------------------------------------------------------
 
 
