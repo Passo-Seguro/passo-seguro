@@ -2,15 +2,19 @@ openapi: 3.1.0
 
 info:
   title: API Passo Seguro
-  version: 1.0.0-rc1
+  version: 1.0.0-rc2
   summary: Contratos de integração da plataforma de zeladoria colaborativa de calçadas de São Paulo.
   description: |
     A API é o **único ponto de integração** do Passo Seguro: app (PWA), robô inspetor,
     serviço de visão, assistente, automação de triagem (RPA) e pipeline de dados
     (Airflow + Databricks) conversam somente por ela.
 
-    Este contrato está **em revisão** (v1.0.0-rc1). Mudanças passam por pull request que
+    Este contrato está **em revisão** (v1.0.0-rc2). Mudanças passam por pull request que
     altere este arquivo e avise as outras partes.
+
+    **Mudanças da rc2 em relação à rc1 (propostas, aguardando aprovação do grupo):**
+    `autor_id` opcional em `POST /relatos`; cabeçalho `X-Device-Token` para o robô;
+    novos `GET /relatos/proximos`, `GET /meus-relatos` e `PATCH /relatos/{id}`.
 
     ## Convenções
 
@@ -29,9 +33,18 @@ info:
     **chamadas entre serviços**: `GET /relatos` (triagem e Airflow) e `POST /deteccoes`
     (API e triagem).
 
-    `POST /relatos` (app e robô), `POST /assistente` e `GET /painel` ficam **públicos**.
-    Esta é uma decisão provisória, para simplificar o MVP. Antes de uso real, avaliar
-    autenticação do app e do robô, limite de requisições e proteção contra abuso.
+    `POST /relatos` com `fonte=app`, `GET /relatos/proximos`, `GET /meus-relatos`,
+    `POST /assistente` e `GET /painel` ficam **públicos**. Esta é uma decisão provisória,
+    para simplificar o MVP. Antes de uso real, avaliar autenticação do app, limite de
+    requisições e proteção contra abuso.
+
+    Duas credenciais simples complementam o `bearerAuth` (também provisórias):
+
+    - `deviceToken` (cabeçalho `X-Device-Token`): identifica o **robô**. É obrigatório em
+      `POST /relatos` quando `fonte=robo`; sem ele, ou com valor inválido, a resposta é 401.
+    - `autorId` (cabeçalho `X-Autor-Id`): o id anônimo gerado no aparelho do cidadão. Não
+      é segredo forte; só liga o aparelho aos relatos que ele mesmo criou
+      (`GET /meus-relatos` e `PATCH /relatos/{id}` no modo app).
 
     ## Limites (decisão provisória)
 
@@ -39,6 +52,11 @@ info:
     **10 MB** (10 × 1024 × 1024 bytes). Acima disso a API responde **413**.
 
     ## Dados pessoais
+
+    O `autor_id` (id anônimo do aparelho) é **recebido, mas nunca devolvido** pela API: ela
+    guarda só o hash (SHA-256 com sal). Nenhuma resposta traz o autor, nem o id nem o hash.
+    As respostas públicas com localização (`GET /relatos/proximos`) trazem `lat` e `lon`
+    **arredondados a 3 casas decimais** (cerca de 100 m).
 
     O campo `descricao` é texto livre digitado pelo cidadão e **pode conter telefone ou
     CPF**. A API guarda o texto como recebido; a automação de triagem mascara esses dados
@@ -82,8 +100,16 @@ paths:
 
         A foto pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
 
-        Endpoint **público** (decisão provisória, ver a introdução do contrato).
-      security: []
+        O campo opcional `autor_id` é o id anônimo gerado no aparelho. A API guarda só o
+        hash e **nunca o devolve**; ele permite ao cidadão ver (`GET /meus-relatos`) e
+        corrigir a categoria (`PATCH /relatos/{id}`) dos próprios relatos.
+
+        **Autenticação por fonte.** Com `fonte=app` o endpoint é **público** (decisão
+        provisória, ver a introdução do contrato). Com `fonte=robo` o cabeçalho
+        `X-Device-Token` é **obrigatório**; se faltar ou for inválido, a resposta é 401.
+      security:
+        - {}
+        - deviceToken: []
       requestBody:
         required: true
         content:
@@ -102,6 +128,7 @@ paths:
                   lon: -46.6333
                   descricao: Buraco grande na calçada em frente ao número 120.
                   fonte: app
+                  autor_id: 3f2b8c1e-7d4a-4e90-9b15-6a0c2d8e4f71
               robo:
                 summary: Relato enviado pelo robô inspetor
                 value:
@@ -154,6 +181,8 @@ paths:
                     status: novo
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/DispositivoNaoAutenticado'
         '413':
           $ref: '#/components/responses/ArquivoGrande'
         '422':
@@ -347,6 +376,264 @@ paths:
           $ref: '#/components/responses/RequisicaoInvalida'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+
+  /relatos/proximos:
+    get:
+      tags: [Relatos]
+      operationId: listarRelatosProximos
+      summary: Lista relatos próximos de um ponto (para o mapa público)
+      description: |
+        Chamado pelo **app** para desenhar o mapa. Devolve os relatos num raio ao redor de
+        `lat`/`lon`, **sem foto e sem descrição**, e só os de status diferente de
+        `rejeitado`.
+
+        **Privacidade (LGPD):** `lat` e `lon` da resposta são **arredondados a 3 casas
+        decimais** (cerca de 100 m). A localização exata nunca sai por este endpoint. A
+        busca em si usa a localização exata guardada.
+
+        A ordem dos itens é do mais próximo para o mais distante.
+
+        Endpoint **público** (decisão provisória, ver a introdução do contrato).
+      security: []
+      parameters:
+        - name: lat
+          in: query
+          description: Latitude do centro da busca, em graus decimais.
+          required: true
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+            example: -23.5505
+        - name: lon
+          in: query
+          description: Longitude do centro da busca, em graus decimais.
+          required: true
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+            example: -46.6333
+        - name: raio_m
+          in: query
+          description: Raio da busca, em metros.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5000
+            default: 1000
+            example: 1000
+      responses:
+        '200':
+          description: Relatos dentro do raio (pode ser uma lista vazia).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RelatoProximo'
+              examples:
+                proximos:
+                  summary: Relatos perto da Sé, com localização arredondada
+                  value:
+                    - id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                      lat: -23.551
+                      lon: -46.633
+                      categoria: buraco
+                      status: novo
+                      prioridade: null
+                      confirmacoes: 0
+                    - id: 7a2e5b90-4f13-4c68-b0d7-3c8a1e6f9d55
+                      lat: -23.55
+                      lon: -46.634
+                      categoria: piso_danificado
+                      status: encaminhado
+                      prioridade: alta
+                      confirmacoes: 4
+                    - id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
+                      lat: -23.552
+                      lon: -46.631
+                      categoria: null
+                      status: novo
+                      prioridade: null
+                      confirmacoes: 0
+                vazio:
+                  summary: Nenhum relato no raio
+                  value: []
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /relatos/{id}:
+    patch:
+      tags: [Relatos]
+      operationId: atualizarRelato
+      summary: Corrige um relato (app) ou atualiza o andamento (triagem)
+      description: |
+        Dois modos, conforme a autenticação:
+
+        **(a) App.** Cabeçalho `X-Autor-Id` igual ao id do autor do relato. Pode alterar
+        **somente `categoria`**, e **só enquanto o `status` for `novo`**. É o "confirmar ou
+        corrigir" da tela de reportar. Qualquer outro campo, outro autor, relato sem autor
+        ou `status` diferente de `novo` resulta em 403.
+
+        **(b) Triagem.** `bearerAuth`. Pode alterar `categoria`, `status`, `subprefeitura`,
+        `prioridade` e `confirmacoes`, em qualquer `status`.
+
+        Só os campos enviados são alterados (atualização parcial); o corpo precisa ter pelo
+        menos um campo. Se `Authorization` vier, ele manda: token inválido é 401, sem cair
+        no modo (a). Sem nenhuma credencial, 401.
+
+        A resposta é o relato completo depois da alteração.
+      security:
+        - bearerAuth: []
+        - autorId: []
+      parameters:
+        - name: id
+          in: path
+          description: Identificador do relato.
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizacaoRelato'
+            examples:
+              app_corrige_categoria:
+                summary: App - o cidadão corrige a categoria detectada
+                value:
+                  categoria: piso_danificado
+              triagem_encaminha:
+                summary: Triagem - encaminha o relato com subprefeitura e prioridade
+                value:
+                  status: encaminhado
+                  subprefeitura: Sé
+                  prioridade: alta
+                  confirmacoes: 3
+      responses:
+        '200':
+          description: Relato atualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relato'
+              examples:
+                app_corrigido:
+                  summary: Depois da correção feita pelo app
+                  value:
+                    id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                    criado_em: '2026-11-04T14:32:10-03:00'
+                    lat: -23.5505
+                    lon: -46.6333
+                    foto_url: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+                    descricao: Buraco grande na calçada em frente ao número 120.
+                    categoria: piso_danificado
+                    confianca: 0.94
+                    fonte: app
+                    status: novo
+                    confirmacoes: 0
+                    subprefeitura: null
+                    prioridade: null
+                triagem_encaminhado:
+                  summary: Depois do encaminhamento feito pela triagem
+                  value:
+                    id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                    criado_em: '2026-11-04T14:32:10-03:00'
+                    lat: -23.5505
+                    lon: -46.6333
+                    foto_url: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+                    descricao: Buraco grande na calçada em frente ao número 120.
+                    categoria: buraco
+                    confianca: 0.94
+                    fonte: app
+                    status: encaminhado
+                    confirmacoes: 3
+                    subprefeitura: Sé
+                    prioridade: alta
+        '400':
+          $ref: '#/components/responses/RequisicaoInvalida'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/Proibido'
+        '404':
+          $ref: '#/components/responses/NaoEncontrado'
+        '422':
+          $ref: '#/components/responses/DadosInvalidos'
+
+  /meus-relatos:
+    get:
+      tags: [Relatos]
+      operationId: listarMeusRelatos
+      summary: Lista os relatos do próprio cidadão
+      description: |
+        Chamado pelo **app** (tela "meus relatos"). Usa o cabeçalho `X-Autor-Id`, o id
+        anônimo gerado no aparelho, e devolve os relatos criados com aquele `autor_id`,
+        do mais recente para o mais antigo, até **100** itens.
+
+        Sem o cabeçalho, ou com valor que não é um UUID, a resposta é 400. Um autor sem
+        relatos recebe uma lista vazia.
+
+        Endpoint **público** (decisão provisória, ver a introdução do contrato): quem
+        souber o `autor_id` vê os relatos dele. Como o id é um UUID aleatório que fica só no
+        aparelho, isso basta para o MVP.
+      security: []
+      parameters:
+        - name: X-Autor-Id
+          in: header
+          description: Id anônimo do autor, gerado no aparelho (UUID).
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: 3f2b8c1e-7d4a-4e90-9b15-6a0c2d8e4f71
+      responses:
+        '200':
+          description: Relatos do autor (pode ser uma lista vazia).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RelatoResumo'
+              examples:
+                dois_relatos:
+                  summary: Um relato com categoria e um sem detecção
+                  value:
+                    - id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+                      criado_em: '2026-11-04T14:32:10-03:00'
+                      categoria: buraco
+                      status: novo
+                      foto_url: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+                    - id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
+                      criado_em: '2026-11-02T09:12:30-03:00'
+                      categoria: null
+                      status: encaminhado
+                      foto_url: https://fotos.exemplo.invalid/relatos/e3a85c17.jpg
+                vazio:
+                  summary: O autor ainda não fez relatos
+                  value: []
+        '400':
+          description: Cabeçalho `X-Autor-Id` ausente ou que não é um UUID.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+              examples:
+                sem_cabecalho:
+                  value:
+                    codigo: requisicao_invalida
+                    mensagem: O cabeçalho X-Autor-Id é obrigatório.
+                    detalhes:
+                      - campo: X-Autor-Id
+                        problema: é obrigatório e deve ser um UUID
 
   /deteccoes:
     post:
@@ -559,8 +846,22 @@ components:
       scheme: bearer
       description: |
         Token enviado em `Authorization: Bearer <token>`. Usado apenas nas chamadas entre
-        serviços (`GET /relatos` e `POST /deteccoes`). Decisão provisória; nenhum token
-        real é versionado no repositório.
+        serviços (`GET /relatos`, `POST /deteccoes`) e na triagem do `PATCH /relatos/{id}`.
+        Decisão provisória; nenhum token real é versionado no repositório.
+    deviceToken:
+      type: apiKey
+      in: header
+      name: X-Device-Token
+      description: |
+        Token do dispositivo do robô inspetor. Obrigatório em `POST /relatos` quando
+        `fonte=robo`. Decisão provisória; nenhum token real é versionado no repositório.
+    autorId:
+      type: apiKey
+      in: header
+      name: X-Autor-Id
+      description: |
+        Id anônimo (UUID) gerado no aparelho do cidadão. Não é um segredo forte: só liga o
+        aparelho aos relatos que ele criou. Usado no modo app de `PATCH /relatos/{id}`.
 
   responses:
     RequisicaoInvalida:
@@ -602,8 +903,52 @@ components:
               value:
                 codigo: arquivo_grande
                 mensagem: O arquivo enviado passa do tamanho máximo de 10 MB.
+    Proibido:
+      description: A credencial é válida, mas não autoriza esta alteração. No modo app, por exemplo, outro autor, campo que não seja `categoria` ou relato que já saiu de `novo`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            outro_autor:
+              summary: O X-Autor-Id não é o do autor do relato
+              value:
+                codigo: proibido
+                mensagem: Este relato pertence a outro autor.
+            fora_de_novo:
+              summary: O relato já saiu do status novo
+              value:
+                codigo: proibido
+                mensagem: A categoria só pode ser corrigida enquanto o relato está novo.
+            campo_nao_permitido:
+              summary: No modo app, só a categoria pode mudar
+              value:
+                codigo: proibido
+                mensagem: O app só pode alterar a categoria.
+    NaoEncontrado:
+      description: Não existe relato com esse id.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            relato_inexistente:
+              value:
+                codigo: nao_encontrado
+                mensagem: Relato não encontrado.
+    DispositivoNaoAutenticado:
+      description: Relato com `fonte=robo` sem o cabeçalho `X-Device-Token`, ou com valor inválido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            sem_token_do_robo:
+              value:
+                codigo: nao_autenticado
+                mensagem: Token do dispositivo ausente ou inválido.
     NaoAutenticado:
-      description: Token ausente ou inválido. Este endpoint é uma chamada entre serviços e exige `bearerAuth`.
+      description: Credencial ausente ou inválida. O endpoint exige `bearerAuth` (chamada entre serviços) ou, no modo app do `PATCH /relatos/{id}`, o cabeçalho `X-Autor-Id`.
       content:
         application/json:
           schema:
@@ -799,6 +1144,13 @@ components:
           example: Buraco grande na calçada em frente ao número 120.
         fonte:
           $ref: '#/components/schemas/FonteRelato'
+        autor_id:
+          type: string
+          format: uuid
+          description: |
+            Id anônimo gerado no aparelho (opcional). A API guarda só o hash (SHA-256 com
+            sal) e **nunca o devolve**.
+          example: 3f2b8c1e-7d4a-4e90-9b15-6a0c2d8e4f71
 
     RelatoCriado:
       type: object
@@ -823,6 +1175,110 @@ components:
           const: novo
           description: A API sempre cria o relato como `novo`.
           example: novo
+
+    RelatoProximo:
+      type: object
+      description: |
+        Relato no mapa público. **Sem foto, sem descrição e sem autor.** `lat` e `lon` vêm
+        arredondados a 3 casas decimais (cerca de 100 m).
+      required:
+        - id
+        - lat
+        - lon
+        - categoria
+        - status
+        - prioridade
+        - confirmacoes
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador do relato.
+          example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          description: Latitude arredondada a 3 casas decimais.
+          example: -23.551
+        lon:
+          type: number
+          minimum: -180
+          maximum: 180
+          description: Longitude arredondada a 3 casas decimais.
+          example: -46.633
+        categoria:
+          $ref: '#/components/schemas/CategoriaOuNula'
+        status:
+          $ref: '#/components/schemas/StatusRelato'
+        prioridade:
+          description: Prioridade de atendimento; nula enquanto o relato está `novo`.
+          oneOf:
+            - $ref: '#/components/schemas/Prioridade'
+            - type: 'null'
+          example: alta
+        confirmacoes:
+          type: integer
+          minimum: 0
+          description: Quantas pessoas confirmaram o mesmo problema.
+          example: 0
+
+    RelatoResumo:
+      type: object
+      description: Relato do próprio cidadão, na tela "meus relatos".
+      required:
+        - id
+        - criado_em
+        - categoria
+        - status
+        - foto_url
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador do relato.
+          example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
+        criado_em:
+          type: string
+          format: date-time
+          description: Quando o relato foi criado.
+          example: '2026-11-04T14:32:10-03:00'
+        categoria:
+          $ref: '#/components/schemas/CategoriaOuNula'
+        status:
+          $ref: '#/components/schemas/StatusRelato'
+        foto_url:
+          type: string
+          format: uri
+          description: Endereço da foto do relato.
+          example: https://fotos.exemplo.invalid/relatos/0b6f6a3e.jpg
+
+    AtualizacaoRelato:
+      type: object
+      description: |
+        Corpo de `PATCH /relatos/{id}`. Atualização parcial: só os campos enviados mudam, e
+        é preciso enviar pelo menos um. No modo **app** só `categoria` é aceita; os demais
+        campos são do modo **triagem** (`bearerAuth`).
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        status:
+          $ref: '#/components/schemas/StatusRelato'
+        subprefeitura:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Subprefeitura responsável pelo local.
+          example: Sé
+        prioridade:
+          $ref: '#/components/schemas/Prioridade'
+        confirmacoes:
+          type: integer
+          minimum: 0
+          description: Quantas pessoas confirmaram o mesmo problema (valor absoluto).
+          example: 3
 
     NovaDeteccao:
       type: object
