@@ -61,7 +61,9 @@ def _migrar(engine, destino: str = "head") -> None:
 def recriar_banco(url: str) -> None:
     """Cria o banco (se faltar) e deixa só o schema das migrações, do zero."""
     alvo = make_url(url)
-    admin = create_engine(alvo.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        alvo.set(database="postgres"), isolation_level="AUTOCOMMIT", connect_args={"connect_timeout": 5}
+    )
     with admin.connect() as c:
         if not c.scalar(text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": alvo.database}):
             c.execute(text(f'CREATE DATABASE "{alvo.database}"'))
