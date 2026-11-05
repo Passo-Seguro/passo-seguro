@@ -65,6 +65,20 @@ class Settings(BaseSettings):
     visao_timeout_s: float = Field(default=5.0, gt=0)
     use_fake_visao: bool = False
 
+    # Assistente (LLM local + RAG, outro serviço). Sem URL e sem fake, ou se ele cair, o
+    # POST /assistente responde `recusou=true` com a mensagem padrão e o link do SP156.
+    assistente_url: str = ""
+    assistente_token: str = ""
+    assistente_timeout_s: float = Field(default=15.0, gt=0)
+    use_fake_assistente: bool = False
+    # Canal oficial da Prefeitura (portal SP156; também atende pelo telefone 156).
+    sp156_url: str = "https://sp156.prefeitura.sp.gov.br/"
+
+    # Arquivo JSON exportado pelo pipeline de dados (view vw_prioridades da camada Ouro).
+    # Formato: lista de objetos no schema PrioridadeSubprefeitura do contrato (a confirmar com
+    # quem faz Big Data). Sem o arquivo, GET /painel responde 404.
+    painel_export_path: Path | None = None
+
     # Emenda rc2 do contrato (autor_id, X-Device-Token, /relatos/proximos, /meus-relatos e
     # PATCH /relatos/{id}). DESLIGADA até o grupo aprovar o contrato rc2.
     habilitar_rc2: bool = False
