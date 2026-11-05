@@ -1,0 +1,14 @@
+# Configuração do gitleaks (varredura de segredos). Usa as regras padrão e libera só
+# valores claramente FICTÍCIOS que aparecem em exemplos de documentação e no ambiente de
+# desenvolvimento. Nenhum segredo real é versionado.
+title = "Passo Seguro"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Tokens de exemplo fictícios (README, mock e docker-compose.dev.yml)"
+regexes = [
+  '''token-ficticio''',
+  '''token-servico-dev''',
+]
