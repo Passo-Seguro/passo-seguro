@@ -2,15 +2,15 @@ openapi: 3.1.0
 
 info:
   title: API Passo Seguro
-  version: 1.0.0
+  version: 1.0.0-rc1
   summary: Contratos de integração da plataforma de zeladoria colaborativa de calçadas de São Paulo.
   description: |
     A API é o **único ponto de integração** do Passo Seguro: app (PWA), robô inspetor,
     serviço de visão, assistente, automação de triagem (RPA) e pipeline de dados
     (Airflow + Databricks) conversam somente por ela.
 
-    Este contrato está **congelado** (v1.0.0). Mudanças passam por pull request que altere
-    este arquivo e avise as outras partes.
+    Este contrato está **em revisão** (v1.0.0-rc1). Mudanças passam por pull request que
+    altere este arquivo e avise as outras partes.
 
     ## Convenções
 
@@ -18,7 +18,7 @@ info:
     - Classes de problema (`categoria`): `buraco`, `piso_danificado`, `obstaculo`,
       `veiculo_na_calcada`. A definição de cada uma está em `contratos/classes.yaml`,
       a fonte única de verdade, e o enum deste arquivo é conferido contra ela por
-      `scripts/checar-classes.sh`.
+      `scripts/checar-classes.py`.
     - `confianca` é sempre um número de 0 a 1.
     - Datas em ISO 8601 com fuso, por exemplo `2026-11-04T14:32:10-03:00`.
     - Coordenadas em graus decimais (WGS84).
@@ -32,6 +32,11 @@ info:
     `POST /relatos` (app e robô), `POST /assistente` e `GET /painel` ficam **públicos**.
     Esta é uma decisão provisória, para simplificar o MVP. Antes de uso real, avaliar
     autenticação do app e do robô, limite de requisições e proteção contra abuso.
+
+    ## Limites (decisão provisória)
+
+    A foto de `POST /relatos` e a imagem de `POST /deteccoes` podem ter no máximo
+    **10 MB** (10 × 1024 × 1024 bytes). Acima disso a API responde **413**.
 
     ## Dados pessoais
 
@@ -69,6 +74,13 @@ paths:
         Chamado pelo **app** e pelo **robô**. Recebe a foto, a localização e uma descrição
         opcional; a API pede a detecção ao serviço de visão e devolve o id do relato e a
         classe detectada.
+
+        O relato é **sempre criado com status `novo`**. Se a visão não detectar nada, o
+        relato é criado do mesmo jeito, com `categoria` e `confianca` nulos. A regra
+        "confiança menor que 0,5 vai para `revisao_humana`" **não é da API: é da triagem**
+        (RPA), que muda o status depois.
+
+        A foto pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
 
         Endpoint **público** (decisão provisória, ver a introdução do contrato).
       security: []
@@ -133,15 +145,17 @@ paths:
                     categoria: veiculo_na_calcada
                     confianca: 0.97
                     status: novo
-                baixa_confianca:
-                  summary: Confiança baixa, vai para revisão humana
+                nada_detectado:
+                  summary: A visão não detectou nada
                   value:
                     id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
-                    categoria: piso_danificado
-                    confianca: 0.42
-                    status: revisao_humana
+                    categoria: null
+                    confianca: null
+                    status: novo
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
+        '413':
+          $ref: '#/components/responses/ArquivoGrande'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
 
@@ -151,11 +165,17 @@ paths:
       summary: Lista relatos, paginados
       description: |
         Chamado pela **triagem (RPA)** e pelo **Airflow** para buscar relatos, por exemplo
-        `GET /relatos?status=novo`. A resposta é paginada: o consumidor percorre
-        "página a página" aumentando `pagina` até `paginacao.tem_proxima` ser `false`.
+        `GET /relatos?status=novo`. Sem o parâmetro `status`, a lista traz **todos os
+        status**. A resposta é paginada: o consumidor percorre "página a página" aumentando
+        `pagina` até `paginacao.tem_proxima` ser `false`.
 
-        Os relatos vêm ordenados do mais antigo para o mais recente (`criado_em`), para
-        que a leitura página a página não pule itens.
+        Os relatos vêm ordenados do mais antigo para o mais recente (`criado_em`).
+
+        **Atenção para quem muda o status dos itens (por exemplo, a triagem).** A paginação
+        é **por número de página**. Se você processar e mudar o status dos itens enquanto
+        pagina com `status=novo`, os relatos restantes sobem de página e alguns são
+        pulados. Por isso, quem processa e muda o status deve **ler TODAS as páginas ANTES
+        de processar**. Para uma coleta incremental (como a do Airflow), use `criado_desde`.
 
         Endpoint **protegido** por `bearerAuth` (chamada entre serviços).
       security:
@@ -163,11 +183,18 @@ paths:
       parameters:
         - name: status
           in: query
-          description: Filtra os relatos pelo status.
+          description: Filtra os relatos pelo status. Se omitido, traz todos os status.
           required: false
           schema:
             $ref: '#/components/schemas/StatusRelato'
-            default: novo
+        - name: criado_desde
+          in: query
+          description: Traz só os relatos criados a partir deste instante (inclusive).
+          required: false
+          schema:
+            type: string
+            format: date-time
+            example: '2026-11-04T00:00:00-03:00'
         - name: pagina
           in: query
           description: Número da página, começando em 1.
@@ -195,8 +222,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/ListaRelatos'
               examples:
-                pagina_com_itens:
-                  summary: Primeira página, com um relato de cada classe
+                novos:
+                  summary: "status=novo: um relato de cada classe e um sem detecção, ainda sem triagem"
                   value:
                     itens:
                       - id: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
@@ -209,9 +236,9 @@ paths:
                         confianca: 0.94
                         fonte: app
                         status: novo
-                        confirmacoes: 3
-                        subprefeitura: Sé
-                        prioridade: alta
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
                       - id: 5d1c7e22-93aa-4b0e-b7c1-2e4f8a6d9c10
                         criado_em: '2026-11-04T14:51:42-03:00'
                         lat: -23.5489
@@ -222,9 +249,9 @@ paths:
                         confianca: 0.88
                         fonte: app
                         status: novo
-                        confirmacoes: 1
-                        subprefeitura: Sé
-                        prioridade: media
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
                       - id: a47e90b5-6c3f-4d18-9a2b-7f1e3c5d8e22
                         criado_em: '2026-11-04T15:08:03-03:00'
                         lat: -23.5672
@@ -236,8 +263,8 @@ paths:
                         fonte: app
                         status: novo
                         confirmacoes: 0
-                        subprefeitura: Pinheiros
-                        prioridade: media
+                        subprefeitura: null
+                        prioridade: null
                       - id: c92d4f61-0b8e-47a3-a5d6-1e9b7f3a2c33
                         criado_em: '2026-11-04T15:40:27-03:00'
                         lat: -23.5649
@@ -249,14 +276,63 @@ paths:
                         fonte: robo
                         status: novo
                         confirmacoes: 0
-                        subprefeitura: Pinheiros
-                        prioridade: baixa
+                        subprefeitura: null
+                        prioridade: null
+                      - id: e3a85c17-2d4b-4f90-8c61-9b0d6e7f1a44
+                        criado_em: '2026-11-04T16:05:51-03:00'
+                        lat: -23.5661
+                        lon: -46.6931
+                        foto_url: https://fotos.exemplo.invalid/relatos/e3a85c17.jpg
+                        descricao: Calçada com algo estranho, não sei explicar.
+                        categoria: null
+                        confianca: null
+                        fonte: app
+                        status: novo
+                        confirmacoes: 0
+                        subprefeitura: null
+                        prioridade: null
                     paginacao:
                       pagina: 1
-                      tamanho: 4
+                      tamanho: 5
                       total_itens: 9
-                      total_paginas: 3
+                      total_paginas: 2
                       tem_proxima: true
+                encaminhados:
+                  summary: "status=encaminhado ou posterior: subprefeitura e prioridade preenchidas"
+                  value:
+                    itens:
+                      - id: 7a2e5b90-4f13-4c68-b0d7-3c8a1e6f9d55
+                        criado_em: '2026-11-02T09:12:30-03:00'
+                        lat: -23.5503
+                        lon: -46.6339
+                        foto_url: https://fotos.exemplo.invalid/relatos/7a2e5b90.jpg
+                        descricao: Piso afundado perto do ponto de ônibus.
+                        categoria: piso_danificado
+                        confianca: 0.91
+                        fonte: app
+                        status: encaminhado
+                        confirmacoes: 4
+                        subprefeitura: Sé
+                        prioridade: alta
+                      - id: 9c4d1f08-5e27-4a39-8b6e-0d2f7a3c1b66
+                        criado_em: '2026-10-28T17:45:00-03:00'
+                        lat: -23.5668
+                        lon: -46.6925
+                        foto_url: https://fotos.exemplo.invalid/relatos/9c4d1f08.jpg
+                        descricao: null
+                        categoria: veiculo_na_calcada
+                        confianca: 0.95
+                        fonte: robo
+                        status: resolvido
+                        confirmacoes: 2
+                        subprefeitura: Pinheiros
+                        prioridade: media
+                    paginacao:
+                      pagina: 1
+                      tamanho: 50
+                      total_itens: 2
+                      total_paginas: 1
+                      tem_proxima: false
                 pagina_vazia:
                   summary: Nenhum relato com o status pedido
                   value:
@@ -286,6 +362,8 @@ paths:
         **normalizados de 0 a 1** em relação ao tamanho da imagem. `x` e `y` são o canto
         superior esquerdo da caixa. Quem treina o YOLO deve converter, porque o formato de
         rótulo do YOLO usa o centro da caixa.
+
+        A imagem pode ter no máximo **10 MB** (decisão provisória); acima disso, 413.
 
         Endpoint **protegido** por `bearerAuth` (chamada entre serviços).
       security:
@@ -354,6 +432,8 @@ paths:
           $ref: '#/components/responses/RequisicaoInvalida'
         '401':
           $ref: '#/components/responses/NaoAutenticado'
+        '413':
+          $ref: '#/components/responses/ArquivoGrande'
         '422':
           $ref: '#/components/responses/DadosInvalidos'
 
@@ -511,6 +591,17 @@ components:
                 detalhes:
                   - campo: lat
                     problema: deve estar entre -90 e 90
+    ArquivoGrande:
+      description: O arquivo enviado passa do tamanho máximo de 10 MB (decisão provisória).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          examples:
+            arquivo_grande:
+              value:
+                codigo: arquivo_grande
+                mensagem: O arquivo enviado passa do tamanho máximo de 10 MB.
     NaoAutenticado:
       description: Token ausente ou inválido. Este endpoint é uma chamada entre serviços e exige `bearerAuth`.
       content:
@@ -541,6 +632,9 @@ components:
       description: |
         Etapa do relato. Fluxo normal: `novo` → `revisao_humana` → `validado` →
         `encaminhado` → `resolvido`. Um relato também pode terminar em `rejeitado`.
+
+        A API sempre cria o relato como `novo`. As mudanças seguintes são feitas pela
+        triagem, por exemplo "confiança menor que 0,5 → `revisao_humana`".
       enum:
         - novo
         - revisao_humana
@@ -574,6 +668,24 @@ components:
       description: Confiança, de 0 a 1.
       example: 0.94
 
+    CategoriaOuNula:
+      description: |
+        Mesma `Categoria`, ou `null` quando o serviço de visão não detectou nada. Só vale
+        para `Relato` e `RelatoCriado`; em `Deteccao` a classe nunca é nula.
+      oneOf:
+        - $ref: '#/components/schemas/Categoria'
+        - type: 'null'
+      example: buraco
+
+    ConfiancaOuNula:
+      description: |
+        Confiança de 0 a 1, ou `null` quando o serviço de visão não detectou nada. Só vale
+        para `Relato` e `RelatoCriado`; em `Deteccao` a confiança nunca é nula.
+      oneOf:
+        - $ref: '#/components/schemas/Confianca'
+        - type: 'null'
+      example: 0.94
+
     Relato:
       type: object
       description: Um relato de problema em calçada.
@@ -588,8 +700,6 @@ components:
         - fonte
         - status
         - confirmacoes
-        - subprefeitura
-        - prioridade
       properties:
         id:
           type: string
@@ -628,9 +738,9 @@ components:
             triagem mascara depois.
           example: Buraco grande na calçada em frente ao número 120.
         categoria:
-          $ref: '#/components/schemas/Categoria'
+          $ref: '#/components/schemas/CategoriaOuNula'
         confianca:
-          $ref: '#/components/schemas/Confianca'
+          $ref: '#/components/schemas/ConfiancaOuNula'
         fonte:
           $ref: '#/components/schemas/FonteRelato'
         status:
@@ -638,14 +748,24 @@ components:
         confirmacoes:
           type: integer
           minimum: 0
-          description: Quantas pessoas confirmaram o mesmo problema.
+          description: Quantas pessoas confirmaram o mesmo problema. Começa em 0.
           example: 3
         subprefeitura:
-          type: string
-          description: Subprefeitura responsável pelo local.
+          type:
+            - string
+            - 'null'
+          description: |
+            Subprefeitura responsável pelo local. Nula enquanto o relato está `novo`; fica
+            preenchida a partir de `encaminhado`.
           example: Sé
         prioridade:
-          $ref: '#/components/schemas/Prioridade'
+          description: |
+            Prioridade de atendimento. Nula enquanto o relato está `novo`; fica preenchida
+            a partir de `encaminhado`.
+          oneOf:
+            - $ref: '#/components/schemas/Prioridade'
+            - type: 'null'
+          example: alta
 
     NovoRelato:
       type: object
@@ -659,7 +779,7 @@ components:
         foto:
           type: string
           format: binary
-          description: Arquivo da foto (JPEG ou PNG).
+          description: Arquivo da foto (JPEG ou PNG), de no máximo 10 MB (decisão provisória).
         lat:
           type: number
           minimum: -90
@@ -695,11 +815,14 @@ components:
           description: Identificador do relato criado.
           example: 0b6f6a3e-1c1d-4a52-8f0e-6a2d9c1e7b01
         categoria:
-          $ref: '#/components/schemas/Categoria'
+          $ref: '#/components/schemas/CategoriaOuNula'
         confianca:
-          $ref: '#/components/schemas/Confianca'
+          $ref: '#/components/schemas/ConfiancaOuNula'
         status:
-          $ref: '#/components/schemas/StatusRelato'
+          type: string
+          const: novo
+          description: A API sempre cria o relato como `novo`.
+          example: novo
 
     NovaDeteccao:
       type: object
@@ -710,7 +833,7 @@ components:
         imagem:
           type: string
           format: binary
-          description: Arquivo da imagem (JPEG ou PNG).
+          description: Arquivo da imagem (JPEG ou PNG), de no máximo 10 MB (decisão provisória).
 
     Caixa:
       type: object
