@@ -121,7 +121,7 @@ def test_rota_inexistente_e_metodo_errado_usam_o_formato_erro(client):
 
 
 def test_saude(client):
-    assert client.get("/saude").json() == {"status": "ok"}
+    assert client.get("/saude").json()["status"] == "ok"  # modo_fake/alertas: ver test_modo_fake.py
 
 
 def test_rc2_desligada_as_rotas_novas_nao_existem(client):
