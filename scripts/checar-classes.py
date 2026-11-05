@@ -2,6 +2,8 @@
 """Confere que o enum `Categoria` de openapi.yaml é igual, na mesma ordem, à lista de
 `nome` em contratos/classes.yaml (a fonte única de verdade). Falha (código 1) se divergir.
 
+Valores `null` no enum são ignorados na comparação.
+
 Usa só a biblioteca padrão (sem PyYAML). Por isso espera os arquivos no formato atual:
 em classes.yaml, linhas `- id: N` e `nome: x`; em openapi.yaml, o schema `Categoria`
 com 4 espaços de indentação e `enum:` em lista com hífens ou entre colchetes.
@@ -18,6 +20,11 @@ NOME_VALIDO = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def limpar(valor: str) -> str:
     return valor.strip().strip("\"'")
+
+
+def sem_nulos(valores):
+    """`null` (ou `~`) no enum só marca "aceita nulo"; não é nome de classe."""
+    return [v for v in valores if v.lower() not in ("null", "~")]
 
 
 def ler_classes(caminho: Path):
@@ -44,14 +51,14 @@ def ler_enum_categoria(caminho: Path):
         if not m:
             continue
         if m.group(1).startswith("["):
-            return [limpar(x) for x in m.group(1).strip("[] ").split(",") if x.strip()]
+            return sem_nulos(limpar(x) for x in m.group(1).strip("[] ").split(",") if x.strip())
         valores = []
         for item in bloco[i + 1 :]:
             m_item = re.match(r"^\s+-\s+(\S+)\s*$", item)
             if not m_item:
                 break
             valores.append(limpar(m_item.group(1)))
-        return valores
+        return sem_nulos(valores)
     raise ValueError("'enum' não encontrado no schema 'Categoria'")
 
 
