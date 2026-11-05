@@ -1,0 +1,49 @@
+# Ambiente de DESENVOLVIMENTO: API + Postgres com PostGIS.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# A API sobe em http://localhost:8000 (documentação interativa em /docs), roda as migrações
+# do Alembic ao iniciar e guarda as fotos no volume "fotos".
+# Todos os valores abaixo são FICTÍCIOS e só valem para desenvolvimento local. Para mudar,
+# exporte a variável (ex.: SERVICE_TOKEN=...) ou crie um arquivo .env ao lado deste.
+name: passo-seguro-dev
+
+services:
+  db:
+    image: postgis/postgis:16-3.5
+    environment:
+      POSTGRES_USER: passo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-passo-dev}
+      POSTGRES_DB: passo_seguro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U passo -d passo_seguro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://passo:${DB_PASSWORD:-passo-dev}@db:5432/passo_seguro
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-token-servico-dev}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - fotos:/data/fotos
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log
+
+volumes:
+  pgdata:
+  fotos:

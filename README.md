@@ -154,7 +154,33 @@ Para escolher um exemplo, use `-H "Prefer: example=obstaculo"`; para um código 
 
 ## Como rodar
 
-Em construção. Esta seção será preenchida após a integração de ponta a ponta (meta: 15/11).
+Integração de ponta a ponta em construção (meta: 15/11). Por enquanto, a **API** já sobe em desenvolvimento.
+
+### API (FastAPI + Postgres/PostGIS)
+
+Precisa de Docker. Sobe a API e o banco, aplica as migrações e serve em `http://localhost:8000` (documentação interativa em `/docs`):
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+curl http://localhost:8000/painel
+curl -H "Authorization: Bearer token-servico-dev" "http://localhost:8000/relatos?status=novo"
+```
+
+Os tokens do compose são **fictícios** e só valem para desenvolvimento. Variáveis de ambiente: veja [`api/.env.example`](./api/.env.example).
+
+**Desenvolvimento local da API** (Python 3.12):
+
+```bash
+cd api
+python -m venv .venv && source .venv/bin/activate      # no Windows: .venv\Scriptsctivate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest                                                  # testes
+ruff check . && ruff format --check .                   # estilo
+```
+
+As dependências têm versões fixas em `api/requirements.txt` e `api/requirements-dev.txt`, geradas com `pip-compile` a partir dos arquivos `.in` (para atualizar: `pip-compile --strip-extras requirements.in`).
+
+**Relatos simulados** para o mapa não começar vazio: [`docs/dados-simulados.md`](./docs/dados-simulados.md).
 
 ## Licença
 
