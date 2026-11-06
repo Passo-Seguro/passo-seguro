@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { obterAutorId } from '../lib/autor';
-import { simularApi, type Rota } from '../test/api-falsa';
+import { listarPendentes } from '../offline/fila';
+import { simularApi, simularSemRede, type Rota } from '../test/api-falsa';
 import { Reportar } from './Reportar';
 
 // O Leaflet não desenha em jsdom: o seletor de mapa é trocado por um botão que "toca no mapa".
@@ -159,5 +160,37 @@ describe('Reportar problema', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Não consegui salvar sua resposta/));
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
+  });
+
+  it('sem rede (a requisição falha): guarda na fila, avisa "aguardando envio" e não perde a foto', async () => {
+    simularSemRede();
+    const user = await ate('detalhes');
+    await user.type(screen.getByLabelText(/Quer contar mais/), 'Buraco fundo');
+    await user.click(screen.getByRole('button', { name: 'Enviar relato' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Relato guardado neste aparelho' })).toBeInTheDocument();
+    expect(screen.getByText('Aguardando envio')).toBeInTheDocument();
+    expect(screen.getByText(/enviamos sozinhos/)).toBeInTheDocument();
+
+    const [item] = await listarPendentes();
+    expect(item.estado).toBe('aguardando');
+    expect(item.descricao).toBe('Buraco fundo');
+    expect(item.lat).toBeCloseTo(-23.5505);
+    expect(item.autorId).toBe(obterAutorId());
+    expect(item.foto?.dados.byteLength).toBe(210 * 1024);
+  });
+
+  it('aparelho já sabe que está offline: nem tenta a rede, guarda direto', async () => {
+    const { fetch: falso } = simularApi([criado('buraco')]);
+    const user = await ate('detalhes');
+    const online = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    try {
+      await user.click(screen.getByRole('button', { name: 'Enviar relato' }));
+      expect(await screen.findByRole('heading', { level: 1, name: 'Relato guardado neste aparelho' })).toBeInTheDocument();
+      expect(falso).not.toHaveBeenCalled();
+      expect(await listarPendentes()).toHaveLength(1);
+    } finally {
+      online.mockRestore();
+    }
   });
 });

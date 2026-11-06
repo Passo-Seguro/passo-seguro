@@ -22,7 +22,9 @@ npm run dev                    # http://localhost:5173 (e o IP da sua rede, para
 | Comando | O que faz |
 |---|---|
 | `npm run dev` | servidor de desenvolvimento |
-| `npm run build` | confere os tipos e gera `dist/` |
+| `npm run build` | confere os tipos (app e service worker) e gera `dist/` com o PWA |
+| `npm run preview` | serve o build de produção em http://localhost:4173 (o service worker só roda no build) |
+| `npm run gen:icones` | regera os ícones do PWA a partir de `public/favicon.svg` |
 | `npm test` | vitest + testing-library |
 | `npm run lint` | ESLint (inclui regras de acessibilidade: jsx-a11y) |
 | `npm run gen:api` | gera `src/api/schema.d.ts` a partir de `../openapi.yaml` |
@@ -41,15 +43,42 @@ e instalação use HTTPS: um túnel (por exemplo `cloudflared tunnel --url http:
 Android com depuração USB, `adb reverse tcp:5173 tcp:5173` e `adb reverse tcp:4010 tcp:4010` e abrir
 `http://localhost:5173` no celular.
 
+## PWA e offline
+
+- **Instalável**: manifesto completo (nome, `theme_color`, `display: standalone`, ícones 192/512 e *maskable*, atalhos
+  "Reportar problema" e "Meus relatos") e `apple-touch-icon` para iOS. Só funciona em HTTPS ou `localhost`.
+- **Service worker** (`src/sw.ts`, Workbox `injectManifest`): cache do shell, então qualquer tela abre sem rede;
+  ladrilhos do OSM já vistos (7 dias) e só os dados **públicos** da API (`/relatos/proximos`, `/painel`) ficam em cache.
+  Nada pessoal (`/meus-relatos`) é guardado.
+- **Fila offline** (`src/offline/fila.ts`, IndexedDB com `idb`): sem rede, o relato (foto comprimida, coordenadas,
+  descrição e id anônimo) vai para a fila e aparece em "Meus relatos" como *Aguardando envio*. Reenvio automático:
+  evento `online` (tenta já), ao voltar para a aba, a cada 15 s e Background Sync (Chromium, funciona até com o app
+  fechado). Falhas de rede/5xx esperam 5 s, 10 s, 20 s… até 5 min; recusa do servidor (4xx) vira "Não foi possível
+  enviar", com "Tentar agora" e "Descartar".
+- **Sem duplicar**: o item só passa a "enviado" depois do 201; execuções simultâneas (online + sync + outra aba) são
+  serializadas por Web Locks e por uma execução única por contexto. **Limite conhecido:** se o servidor criar o relato e a
+  resposta se perder, a nova tentativa cria outro, pois o contrato rc2 não tem chave de idempotência
+  (proposta: aceitar um `Idempotency-Key`/`id` gerado no aparelho em `POST /relatos`).
+- A foto fica no IndexedDB como `ArrayBuffer` + tipo (mais portátil que `Blob` no Safari/iOS).
+
+## Acessibilidade
+
+jsx-a11y no lint, jest-axe nas telas (`src/a11y.test.tsx`) e Lighthouse. Resumo das decisões: `lang="pt-BR"`, link
+"Pular para o conteúdo", foco movido para o `h1` a cada tela/etapa, foco visível (anel duplo), alvos de toque de pelo
+menos 44 px, mapa com lista equivalente, erros e avisos em regiões `role="alert"`/`role="status"`, prioridade e status
+sempre com símbolo + texto, `prefers-reduced-motion`.
+
 ## Estrutura
 
 ```
 src/
   api/        cliente tipado (openapi-fetch) e schema.d.ts gerado
   components/ mapa, seletor de local, selos, aviso de privacidade
-  hooks/      busca de relatos por perto
+  hooks/      busca de relatos por perto, fila offline, estado da conexão
+  offline/    fila em IndexedDB e agendador de reenvio
+  sw.ts       service worker
   lib/        domínio (rótulos em português), id anônimo, compressão da foto, GPS
-  pages/      Mapa, Reportar (etapas em pages/reportar/), Meus relatos, Privacidade
+  pages/      Mapa, Reportar (etapas em pages/reportar/), Meus relatos, Pergunte, Painel, Privacidade
   test/       API falsa e setup dos testes
 ```
 

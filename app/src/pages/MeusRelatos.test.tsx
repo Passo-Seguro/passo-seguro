@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { obterAutorId } from '../lib/autor';
+import { enfileirar } from '../offline/fila';
 import { simularApi, simularSemRede } from '../test/api-falsa';
 import { MeusRelatos } from './MeusRelatos';
 
@@ -33,7 +34,7 @@ describe('Meus relatos', () => {
     ]);
     abrir();
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Buraco' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 3, name: 'Buraco' })).toBeInTheDocument();
     expect(screen.getByText('Problema ainda sem classificação')).toBeInTheDocument();
     expect(screen.getByText('Recebido', { selector: '.selo' })).toBeInTheDocument();
     expect(screen.getByText('Encaminhado', { selector: '.selo' })).toBeInTheDocument();
@@ -82,5 +83,33 @@ describe('Meus relatos', () => {
     const foto = await screen.findByRole('img', { name: 'Foto do relato' });
     foto.dispatchEvent(new Event('error'));
     expect(await screen.findByRole('img', { name: 'Foto indisponível no momento' })).toBeInTheDocument();
+  });
+
+  it('mostra "Aguardando envio" para os relatos guardados no aparelho, mesmo sem rede', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    simularSemRede();
+    await enfileirar({ foto: new Blob([new Uint8Array(10)], { type: 'image/jpeg' }), lat: -23.55, lon: -46.63, descricao: '', autorId: obterAutorId() });
+    abrir();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Aguardando envio (1)' })).toBeInTheDocument();
+    expect(screen.getByText('Aguardando envio', { selector: '.selo' })).toBeInTheDocument();
+    expect(screen.getByText(/Vamos enviar assim que a conexão voltar/)).toBeInTheDocument();
+    // o erro de carregar os já enviados não esconde a fila
+    expect(await screen.findByText(/não consigo mostrar os relatos já enviados|Não consegui carregar seus relatos/)).toBeInTheDocument();
+    expect(screen.queryByText(/ainda não fez nenhum relato/)).not.toBeInTheDocument();
+  });
+
+  it('"Descartar" pede confirmação antes de apagar', async () => {
+    simularApi([{ metodo: 'GET', caminho: '/meus-relatos', corpo: [] }]);
+    await enfileirar({ foto: new Blob([new Uint8Array(10)], { type: 'image/jpeg' }), lat: -23.55, lon: -46.63, descricao: '', autorId: obterAutorId() });
+    abrir();
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Descartar' }));
+    expect(screen.getByRole('button', { name: 'Sim, descartar' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Não, manter' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Aguardando envio (1)' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Descartar' }));
+    await user.click(screen.getByRole('button', { name: 'Sim, descartar' }));
+    await vi.waitFor(() => expect(screen.queryByText(/Aguardando envio \(/)).not.toBeInTheDocument());
   });
 });

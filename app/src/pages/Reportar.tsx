@@ -6,14 +6,16 @@ import { Pagina } from '../components/Pagina';
 import { obterAutorId } from '../lib/autor';
 import { PERGUNTA_CATEGORIA } from '../lib/dominio';
 import { comprimirImagem, ErroImagem } from '../lib/imagem';
+import { enfileirar } from '../offline/fila';
 import type { Ponto } from '../lib/localizacao';
 import { EtapaClasse } from './reportar/EtapaClasse';
 import { EtapaDetalhes } from './reportar/EtapaDetalhes';
 import { EtapaFoto, type FotoPronta } from './reportar/EtapaFoto';
 import { EtapaLocal } from './reportar/EtapaLocal';
+import { EtapaGuardado } from './reportar/EtapaGuardado';
 import { EtapaObrigado } from './reportar/EtapaObrigado';
 
-type Etapa = 'foto' | 'local' | 'detalhes' | 'enviando' | 'classe' | 'obrigado';
+type Etapa = 'foto' | 'local' | 'detalhes' | 'enviando' | 'classe' | 'obrigado' | 'guardado';
 
 /** Traduz uma falha de envio em mensagem simples e diz para qual etapa voltar. */
 function tratarFalhaDoEnvio(e: unknown): { mensagem: string; voltarPara: Etapa; limparLocal?: boolean } {
@@ -26,9 +28,6 @@ function tratarFalhaDoEnvio(e: unknown): { mensagem: string; voltarPara: Etapa; 
     }
     if (e.status === 422) {
       return { mensagem: 'Alguma informação não passou na verificação. Confira a foto e o local.', voltarPara: 'detalhes' };
-    }
-    if (e.semRede) {
-      return { mensagem: 'Sem conexão com a internet. Confira o sinal e tente enviar de novo.', voltarPara: 'detalhes' };
     }
   }
   return { mensagem: 'O servidor está com problemas agora. Tente enviar de novo em instantes.', voltarPara: 'detalhes' };
@@ -67,15 +66,36 @@ export function Reportar() {
     }
   }
 
+  /** Sem rede: o relato (foto comprimida, coordenadas e descrição) fica no aparelho e sobe depois. */
+  async function guardarNaFila() {
+    if (!foto || !ponto) return;
+    try {
+      await enfileirar({ foto: foto.blob, lat: ponto.lat, lon: ponto.lon, descricao, autorId });
+      setEtapa('guardado');
+    } catch (e) {
+      console.warn('Não consegui guardar o relato na fila', e);
+      setAviso('Sem internet e não consegui guardar o relato neste aparelho. Tente de novo quando a conexão voltar.');
+      setEtapa('detalhes');
+    }
+  }
+
   async function enviar() {
     if (!foto || !ponto) return;
     setAviso(null);
     setEtapa('enviando');
+    if (!navigator.onLine) {
+      await guardarNaFila();
+      return;
+    }
     try {
       const criado = await criarRelato({ foto: foto.blob, lat: ponto.lat, lon: ponto.lon, descricao, autorId });
       setRelato(criado);
       setEtapa('classe');
     } catch (e) {
+      if (e instanceof ApiError && e.semRede) {
+        await guardarNaFila();
+        return;
+      }
       const falha = tratarFalhaDoEnvio(e);
       setAviso(falha.mensagem);
       if (falha.limparLocal) setPonto(null);
@@ -123,6 +143,7 @@ export function Reportar() {
     enviando: 'Enviando seu relato…',
     classe: relato?.categoria ? PERGUNTA_CATEGORIA[relato.categoria] : 'Ajude a identificar o problema',
     obrigado: 'Obrigado! Seu relato foi enviado',
+    guardado: 'Relato guardado neste aparelho',
   };
 
   return (
@@ -183,6 +204,8 @@ export function Reportar() {
       {etapa === 'obrigado' && relato && (
         <EtapaObrigado status={relato.status} categoria={categoriaFinal} onOutro={recomecar} />
       )}
+
+      {etapa === 'guardado' && <EtapaGuardado onOutro={recomecar} />}
     </Pagina>
   );
 }
