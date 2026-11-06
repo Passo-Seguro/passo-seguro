@@ -106,9 +106,30 @@ def test_proximos_parametros_invalidos_400(client_rc2, params):
     assert r.status_code == 400 and r.json()["codigo"] == "requisicao_invalida"
 
 
-def test_proximos_fora_de_sao_paulo_422(client_rc2):
-    r = client_rc2.get("/relatos/proximos", params={"lat": -22.9, "lon": -43.2})
-    assert r.status_code == 422 and r.json()["codigo"] == "fora_da_area"
+def test_proximos_fora_de_sao_paulo_e_200_com_lista_vazia_nao_e_erro(client_rc2, criar_relato_db):
+    # mesmo havendo um relato naquele ponto (ex.: criado antes do limite de área), nada é devolvido
+    criar_relato_db(lat=-22.9, lon=-43.2)
+    r = client_rc2.get("/relatos/proximos", params={"lat": -22.9, "lon": -43.2, "raio_m": 5000})
+    assert r.status_code == 200 and r.json() == []
+
+
+def test_proximos_dentro_de_sao_paulo_continua_devolvendo_relatos(client_rc2, criar_relato_db):
+    criar_relato_db(lat=-23.5505, lon=-46.6333)
+    r = client_rc2.get("/relatos/proximos", params=CENTRO)
+    assert r.status_code == 200 and len(r.json()) == 1
+
+
+def test_proximos_sem_limite_de_area_devolve_o_que_houver(montar_cliente, settings, criar_relato_db):
+    criar_relato_db(lat=-22.9, lon=-43.2)
+    aberto = settings.model_copy(update={"habilitar_rc2": True, "area_permitida": "sem-limite"})
+    r = montar_cliente(aberto).get("/relatos/proximos", params={"lat": -22.9, "lon": -43.2})
+    assert r.status_code == 200 and len(r.json()) == 1
+
+
+def test_proximos_coordenada_impossivel_continua_400_nao_vira_200(client_rc2):
+    for params in ({"lat": 200, "lon": -46.6}, {"lat": -23.5, "lon": -200}, {"lat": -23.5}):
+        r = client_rc2.get("/relatos/proximos", params=params)
+        assert r.status_code == 400 and r.json()["codigo"] == "requisicao_invalida"
 
 
 # =========================== GET /meus-relatos ===========================

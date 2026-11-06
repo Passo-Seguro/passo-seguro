@@ -20,7 +20,7 @@ from app.db.session import get_db
 from app.deps import get_armazenamento
 from app.dominio import StatusRelato
 from app.erros import ErroApi
-from app.routers.relatos import validar_coordenadas
+from app.routers.relatos import fora_da_area
 from app.schemas.comum import Erro
 from app.schemas.relatos import AtualizacaoRelato, Relato, RelatoProximo, RelatoResumo
 from app.seguranca import extrair_bearer, hash_autor, nao_autenticado, tokens_iguais
@@ -35,7 +35,7 @@ router = APIRouter(tags=["Relatos"])
     response_model=list[RelatoProximo],
     operation_id="listarRelatosProximos",
     summary="Lista relatos próximos de um ponto (para o mapa público)",
-    responses={400: {"model": Erro}, 422: {"model": Erro}},
+    responses={400: {"model": Erro}},
 )
 def listar_relatos_proximos(
     settings: Annotated[Settings, Depends(get_settings)],
@@ -44,7 +44,9 @@ def listar_relatos_proximos(
     lon: Annotated[float, Query(ge=-180, le=180)],
     raio_m: Annotated[int, Query(ge=1, le=5000)] = 1000,
 ) -> list[RelatoProximo]:
-    validar_coordenadas(lat, lon, settings)
+    if fora_da_area(lat, lon, settings):
+        # Fora de São Paulo o mapa simplesmente não tem relatos: lista vazia, não é erro.
+        return []
     return [
         RelatoProximo(
             id=linha.relato.id,

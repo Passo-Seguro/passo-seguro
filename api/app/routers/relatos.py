@@ -30,10 +30,15 @@ log = logging.getLogger("passo_seguro.relatos")
 router = APIRouter(tags=["Relatos"])
 
 
-def validar_coordenadas(lat: float, lon: float, settings: Settings) -> None:
-    """422 se o ponto estiver fora da área de atendimento (padrão: município de São Paulo)."""
+def fora_da_area(lat: float, lon: float, settings: Settings) -> bool:
+    """True se o ponto estiver fora da área de atendimento (padrão: município de São Paulo)."""
     caixa = settings.caixa_permitida
-    if caixa is not None and not caixa.contem(lat, lon):
+    return caixa is not None and not caixa.contem(lat, lon)
+
+
+def validar_coordenadas(lat: float, lon: float, settings: Settings) -> None:
+    """422 `fora_da_area` se o ponto estiver fora da área (usado só em POST /relatos)."""
+    if fora_da_area(lat, lon, settings):
         raise ErroApi(
             422,
             "fora_da_area",  # código próprio: o app mostra "toque no mapa dentro da cidade"
