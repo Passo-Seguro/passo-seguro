@@ -1,5 +1,6 @@
 import { Link, NavLink, Route, Routes } from 'react-router';
 import { AvisoPrivacidade } from './components/AvisoPrivacidade';
+import { IconeChat, IconeMapa, IconePainel, IconeRelatos, Logo } from './components/Icones';
 import { useOnline } from './hooks/useOnline';
 import { Mapa } from './pages/Mapa';
 import { MeusRelatos } from './pages/MeusRelatos';
@@ -30,7 +31,7 @@ export function App() {
       </a>
       <header className="topo">
         <p className="marca">
-          <span aria-hidden="true">📍</span> Passo Seguro
+          <Logo tamanho={34} /> <span>Passo Seguro</span>
         </p>
         <Link to="/privacidade" className="topo-link">
           Privacidade
@@ -56,16 +57,16 @@ export function App() {
 
       <nav className="menu" aria-label="Principal">
         <NavLink to="/" end>
-          <span aria-hidden="true">🗺</span> Mapa
+          <IconeMapa /> <span>Mapa</span>
         </NavLink>
         <NavLink to="/meus-relatos">
-          <span aria-hidden="true">📋</span> Meus relatos
+          <IconeRelatos /> <span>Meus relatos</span>
         </NavLink>
         <NavLink to="/pergunte">
-          <span aria-hidden="true">💬</span> Pergunte
+          <IconeChat /> <span>Pergunte</span>
         </NavLink>
         <NavLink to="/painel">
-          <span aria-hidden="true">📊</span> Painel
+          <IconePainel /> <span>Painel</span>
         </NavLink>
       </nav>
     </div>

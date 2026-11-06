@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { listarMeusRelatos } from '../api/cliente';
 import type { RelatoResumo } from '../api/tipos';
+import { IconeGaleria, IconeRelogio, IconeX } from '../components/Icones';
 import { Pagina } from '../components/Pagina';
 import { SeloStatus } from '../components/Selos';
 import { useFila } from '../hooks/useFila';
@@ -17,7 +18,7 @@ function FotoRelato({ url }: { url: string }) {
   if (falhou) {
     return (
       <div className="foto-indisponivel" role="img" aria-label="Foto indisponível no momento">
-        <span aria-hidden="true">🖼</span>
+        <IconeGaleria width="2em" height="2em" />
       </div>
     );
   }
@@ -41,7 +42,7 @@ function FotoGuardada({ foto }: { foto: FotoNaFila | null }) {
   if (!url) {
     return (
       <div className="foto-indisponivel" role="img" aria-label="Foto guardada neste aparelho">
-        <span aria-hidden="true">🖼</span>
+        <IconeGaleria width="2em" height="2em" />
       </div>
     );
   }
@@ -89,11 +90,11 @@ function CartaoAguardando({ item }: { item: ItemFila }) {
         <p className="selos">
           {falhou ? (
             <span className="selo selo-status-rejeitado">
-              <span aria-hidden="true">✖</span> Não foi possível enviar
+              <IconeX /> Não foi possível enviar
             </span>
           ) : (
             <span className="selo selo-fila">
-              <span aria-hidden="true">⏳</span> {item.estado === 'enviando' ? 'Enviando agora…' : 'Aguardando envio'}
+              <IconeRelogio /> {item.estado === 'enviando' ? 'Enviando agora…' : 'Aguardando envio'}
             </span>
           )}
         </p>

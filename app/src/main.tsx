@@ -4,6 +4,10 @@ import { BrowserRouter } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { iniciarAgendador } from './offline/agendador';
+import '@fontsource/atkinson-hyperlegible-next/latin-400.css';
+import '@fontsource/atkinson-hyperlegible-next/latin-700.css';
+import '@fontsource/barlow-condensed/latin-600.css';
+import '@fontsource/barlow-condensed/latin-700.css';
 import './estilos.css';
 
 // Service worker: cache do shell, funcionamento offline e Background Sync. Só em build de produção.

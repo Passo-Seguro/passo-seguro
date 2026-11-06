@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Anuncio } from '../components/Anuncio';
+import { IconeMais, IconePino } from '../components/Icones';
 import { MapaRelatos, type ComandoMapa } from '../components/MapaRelatos';
 import { Pagina } from '../components/Pagina';
 import { SeloPrioridade, SeloStatus } from '../components/Selos';
@@ -54,7 +55,7 @@ export function Mapa() {
     <Pagina titulo="Problemas perto de você" tituloDocumento="Mapa" className="pagina-mapa">
       <div className="barra-mapa">
         <button type="button" className="botao botao-secundario" onClick={irParaMim} disabled={procurando}>
-          {procurando ? 'Procurando…' : 'Usar minha localização'}
+          <IconePino /> {procurando ? 'Procurando…' : 'Usar minha localização'}
         </button>
       </div>
       <Anuncio mensagem={aviso} tipo="info" />
@@ -134,7 +135,7 @@ export function Mapa() {
       </section>
 
       <Link to="/reportar" className="botao botao-fixo">
-        <span aria-hidden="true">＋</span> Reportar problema
+        <IconeMais /> Reportar problema
       </Link>
     </Pagina>
   );

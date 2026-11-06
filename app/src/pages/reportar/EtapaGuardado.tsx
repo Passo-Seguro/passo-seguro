@@ -1,4 +1,5 @@
 import { Link } from 'react-router';
+import { IconeRelogio } from '../../components/Icones';
 
 /** Sem rede: o relato ficou na fila do aparelho. */
 export function EtapaGuardado({ onOutro }: { onOutro: () => void }) {
@@ -7,7 +8,7 @@ export function EtapaGuardado({ onOutro }: { onOutro: () => void }) {
       <p className="selos">
         Situação do seu relato:{' '}
         <span className="selo selo-fila">
-          <span aria-hidden="true">⏳</span> Aguardando envio
+          <IconeRelogio /> Aguardando envio
         </span>
       </p>
       <p>

@@ -13,6 +13,7 @@ import { EtapaDetalhes } from './reportar/EtapaDetalhes';
 import { EtapaFoto, type FotoPronta } from './reportar/EtapaFoto';
 import { EtapaLocal } from './reportar/EtapaLocal';
 import { EtapaGuardado } from './reportar/EtapaGuardado';
+import { Passos } from './reportar/Passos';
 import { EtapaObrigado } from './reportar/EtapaObrigado';
 
 type Etapa = 'foto' | 'local' | 'detalhes' | 'enviando' | 'classe' | 'obrigado' | 'guardado';
@@ -148,6 +149,9 @@ export function Reportar() {
 
   return (
     <Pagina titulo={titulos[etapa]} tituloDocumento="Reportar problema">
+      {(etapa === 'foto' || etapa === 'local' || etapa === 'detalhes') && (
+        <Passos atual={etapa === 'foto' ? 1 : etapa === 'local' ? 2 : 3} />
+      )}
       <Anuncio mensagem={aviso} />
 
       {etapa === 'foto' && (
