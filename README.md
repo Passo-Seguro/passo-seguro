@@ -174,9 +174,15 @@ Os tokens do compose são **fictícios** e só valem para desenvolvimento. Vari�
 cd api
 python -m venv .venv && source .venv/bin/activate      # no Windows: .venv/Scripts/activate
 pip install -r requirements.txt -r requirements-dev.txt
-pytest                                                  # testes
+pytest                                                  # testes (precisa do banco: veja abaixo)
 ruff check . && ruff format --check .                   # estilo
 ```
+
+Os testes usam um Postgres+PostGIS de teste (`TEST_DATABASE_URL`, padrão `passo_seguro_test` no banco do compose). Suba só o banco com `docker compose -f docker-compose.dev.yml up -d db`; sem banco, os testes que dependem dele são pulados (no CI, com `EXIGIR_BANCO=1`, viram falha). O teste de **contrato** (`tests/test_contrato.py`) sobe a API de verdade e usa o Schemathesis para conferir cada resposta contra o [`openapi.yaml`](./openapi.yaml); `OPENAPI_PATH=<arquivo>` aponta outro contrato (por exemplo, a emenda rc2).
+
+**Observabilidade:** `GET /metrics` (formato Prometheus, exige `Authorization: Bearer <METRICS_TOKEN>`) traz a latência por rota, o total de requisições por rota e status e as requisições em andamento. Os logs saem em JSON, uma linha por requisição, **sem** foto, descrição, parâmetros de consulta (coordenadas) nem cabeçalhos.
+
+**Emenda rc2 do contrato:** `GET /relatos/proximos`, `GET /meus-relatos`, `PATCH /relatos/{id}`, `autor_id` e `X-Device-Token` ficam isolados em `api/app/routers/rc2.py` e só existem com `HABILITAR_RC2=true` (ligado no `docker-compose.dev.yml`, desligado por padrão até o grupo aprovar o PR `feat/contratos-rc2`).
 
 As dependências têm versões fixas em `api/requirements.txt` e `api/requirements-dev.txt`, geradas com `pip-compile` a partir dos arquivos `.in` (para atualizar: `pip-compile --strip-extras requirements.in`).
 

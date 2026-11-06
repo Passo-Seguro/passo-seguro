@@ -14,13 +14,17 @@ from app.erros import (
     tratar_http,
     tratar_validacao,
 )
-from app.routers import assistente, deteccoes, painel, relatos
+from app.limites import LimiteCorpoMiddleware
+from app.observabilidade import Metricas, ObservabilidadeMiddleware, configurar_logs
+from app.routers import assistente, deteccoes, metricas, painel, rc2, relatos
 
 VERSAO_CONTRATO = "1.0.0-rc1"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    if settings.habilitar_rc2 and not settings.salt_autor:
+        raise RuntimeError("SALT_AUTOR é obrigatório quando HABILITAR_RC2=true (hash do autor_id)")
     app = FastAPI(
         title="API Passo Seguro",
         version=VERSAO_CONTRATO,
@@ -33,6 +37,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, tratar_http)
     app.add_exception_handler(Exception, tratar_excecao)
 
+    app.state.metricas = Metricas()
+    # O último middleware adicionado fica por fora. Ordem, de dentro para fora: limite de corpo
+    # -> CORS (o 413 também leva os cabeçalhos CORS) -> observabilidade (enxerga TUDO).
+    app.add_middleware(LimiteCorpoMiddleware, max_bytes=settings.max_upload_bytes)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.origens_cors,
@@ -40,10 +48,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.add_middleware(ObservabilidadeMiddleware, metricas=app.state.metricas)
+
+    if settings.habilitar_rc2:
+        # Antes de relatos.router só por clareza: as rotas não se sobrepõem (GET /relatos/proximos
+        # e PATCH /relatos/{id} não existem na rc1).
+        app.include_router(rc2.router)
     app.include_router(relatos.router)
     app.include_router(deteccoes.router)
     app.include_router(assistente.router)
     app.include_router(painel.router)
+    app.include_router(metricas.router)
 
     @app.get("/saude", include_in_schema=False)
     def saude() -> dict[str, str]:
@@ -57,4 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+# O ponto de entrada (uvicorn app.main:app) liga os logs em JSON. create_app() não mexe nos
+# logs, para os testes poderem capturá-los.
+configurar_logs(get_settings().log_level)
 app = create_app()
