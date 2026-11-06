@@ -1,6 +1,14 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema';
-import type { Categoria, Erro, RelatoCriado, RelatoProximo, RelatoResumo } from './tipos';
+import type {
+  Categoria,
+  Erro,
+  PrioridadeSubprefeitura,
+  RelatoCriado,
+  RelatoProximo,
+  RelatoResumo,
+  RespostaAssistente,
+} from './tipos';
 
 /** Endereço da API (variável de build VITE_API_URL; por padrão, o mock do Prism). */
 export const API_URL: string = (import.meta.env.VITE_API_URL ?? 'http://localhost:4010').replace(/\/+$/, '');
@@ -102,6 +110,21 @@ export function listarRelatosProximos(
       signal: sinal,
     }),
   );
+}
+
+/** POST /assistente. Quando o assistente cai, a API ainda responde 200 com `recusou: true`. */
+export function perguntarAoAssistente(pergunta: string, sinal?: AbortSignal): Promise<RespostaAssistente> {
+  return executar(() => cliente.POST('/assistente', { body: { pergunta }, signal: sinal }));
+}
+
+/** GET /painel. Devolve `null` quando o pipeline ainda não exportou nada (404). */
+export async function obterPainel(sinal?: AbortSignal): Promise<PrioridadeSubprefeitura[] | null> {
+  try {
+    return await executar(() => cliente.GET('/painel', { signal: sinal }));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 /** GET /meus-relatos (X-Autor-Id no cabeçalho). */
