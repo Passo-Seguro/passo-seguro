@@ -19,8 +19,9 @@ info:
     **Também documentado na rc2 (já é o comportamento da API):** `503` em `POST /deteccoes`
     (`visao_indisponivel`) e em `GET /painel` (`painel_invalido`); o limite de itens das
     listas `GET /relatos/proximos` (1000) e `GET /meus-relatos` (100); a resposta do
-    `POST /assistente` quando o assistente está fora do ar; e o 422 de localização fora de
-    São Paulo, com exemplo e código próprio (`fora_da_area`).
+    `POST /assistente` quando o assistente está fora do ar; e o 422 de `POST /relatos` para localização fora de
+    São Paulo, com código próprio (`fora_da_area`). Já `GET /relatos/proximos` com ponto fora de São
+    Paulo **não é erro**: devolve `200` com lista vazia.
 
     ## Convenções
 
@@ -403,6 +404,10 @@ paths:
         A ordem dos itens é do mais próximo para o mais distante. A resposta traz no máximo
         **1000** relatos (os 1000 mais próximos); para ver menos, diminua `raio_m`.
 
+        **Ponto fora de São Paulo** (fora da área de atendimento) **não é erro**: a resposta é `200`
+        com lista vazia, porque o mapa simplesmente não tem relatos ali. Só `lat`/`lon` impossíveis
+        (fora de -90..90 e -180..180) ou ausentes dão `400`.
+
         Endpoint **público** (decisão provisória, ver a introdução do contrato).
       security: []
       parameters:
@@ -472,10 +477,11 @@ paths:
                 vazio:
                   summary: Nenhum relato no raio
                   value: []
+                fora_da_area:
+                  summary: Ponto fora de São Paulo (fora da área de atendimento), lista vazia e não erro
+                  value: []
         '400':
           $ref: '#/components/responses/RequisicaoInvalida'
-        '422':
-          $ref: '#/components/responses/DadosInvalidos'
 
   /relatos/{id}:
     patch:
@@ -917,10 +923,11 @@ components:
       description: |
         A requisição está bem formada, mas os dados não passam na validação (valor fora do intervalo, imagem ilegível, pergunta vazia).
 
-        **Localização fora de São Paulo** é um caso à parte, com o código próprio `fora_da_area`
-        (e `detalhes[0].campo` = `lat`), para o app tratá-lo sem ler o texto da mensagem: ele deve
-        mostrar "Você está fora de São Paulo; toque no mapa dentro da cidade". Todos os outros 422
-        usam `dados_invalidos`.
+        **Localização fora de São Paulo em `POST /relatos`** é um caso à parte, com o código próprio
+        `fora_da_area` (e `detalhes[0].campo` = `lat`), para o app tratá-lo sem ler o texto da
+        mensagem: ele deve mostrar "Você está fora de São Paulo; toque no mapa dentro da cidade".
+        Só este endpoint usa `fora_da_area`; todos os outros 422 usam `dados_invalidos`. (Em
+        `GET /relatos/proximos` o ponto fora de São Paulo dá 200 com lista vazia.)
       content:
         application/json:
           schema:
@@ -1593,7 +1600,7 @@ components:
           description: |
             Código estável do erro, em `snake_case`. O app decide o que mostrar por este campo,
             não pelo texto de `mensagem`. Em 422 há dois: `dados_invalidos` (padrão) e
-            `fora_da_area` (localização fora do município de São Paulo).
+            `fora_da_area` (só em `POST /relatos`: localização fora do município de São Paulo).
           example: dados_invalidos
         mensagem:
           type: string

@@ -92,10 +92,8 @@ checar "GET /relatos/proximos lista vazia" 200 '[]' \
   -H 'Prefer: example=vazio' "$MOCK_URL/relatos/proximos?lat=-23.5505&lon=-46.6333"
 checar "GET /relatos/proximos 400 forçado" 400 '"requisicao_invalida"' \
   -H 'Prefer: code=400' "$MOCK_URL/relatos/proximos?lat=-23.5505&lon=-46.6333"
-checar "GET /relatos/proximos fora de SP (422 forçado)" 422 '"dados_invalidos"' \
-  -H 'Prefer: code=422' "$MOCK_URL/relatos/proximos?lat=10&lon=10"
-checar "GET /relatos/proximos fora de SP (codigo fora_da_area)" 422 '"fora_da_area"' \
-  -H 'Prefer: code=422, example=fora_da_area' "$MOCK_URL/relatos/proximos?lat=10&lon=10"
+checar "GET /relatos/proximos fora de SP (200 com lista vazia, nao e erro)" 200 '[]' \
+  -H 'Prefer: example=fora_da_area' "$MOCK_URL/relatos/proximos?lat=10&lon=10"
 
 echo "==> Emenda rc2: GET /meus-relatos"
 checar "GET /meus-relatos" 200 '"foto_url"' -H "X-Autor-Id: $AUTOR_FICTICIO" "$MOCK_URL/meus-relatos"
