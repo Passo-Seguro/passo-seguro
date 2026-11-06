@@ -8,3 +8,6 @@ coverage/
 *.tsbuildinfo
 lighthouse-*.json
 lighthouse-*.html
+
+# a regra "lib/" da raiz (Python) nao vale para o codigo do app
+!/src/lib/
