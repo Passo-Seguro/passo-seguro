@@ -17,7 +17,7 @@ const ICONE_PINO = L.divIcon({
   className: 'marcador-alvo',
   iconSize: [88, 44],
   iconAnchor: [44, 44], // a ponta do pino fica no ponto marcado, com o rótulo acima da mira
-  html: '<span class="marcador marcador-pino"><span aria-hidden="true">📍 Aqui</span></span>',
+  html: '<span class="marcador marcador-pino"><span aria-hidden="true">Aqui</span></span>',
 });
 
 function Toques({ onEscolher }: Pick<Props, 'onEscolher'>) {

@@ -23,8 +23,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        theme_color: '#0b4f6c',
-        background_color: '#f5f7f9',
+        theme_color: '#0b2a3c',
+        background_color: '#f6f1e6',
         categories: ['utilities', 'navigation'],
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
@@ -38,7 +38,7 @@ export default defineConfig({
         ],
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
       },
       devOptions: { enabled: false },
     }),

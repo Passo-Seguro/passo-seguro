@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent } from 'react';
+import { IconeCamera, IconeGaleria } from '../../components/Icones';
 
 export interface FotoPronta {
   blob: Blob;
@@ -44,10 +45,10 @@ export function EtapaFoto({ foto, preparando, onArquivo, onContinuar }: Props) {
           onClick={() => camera.current?.click()}
           disabled={preparando}
         >
-          <span aria-hidden="true">📷</span> {foto ? 'Tirar outra foto' : 'Tirar foto'}
+          <IconeCamera /> {foto ? 'Tirar outra foto' : 'Tirar foto'}
         </button>
         <button type="button" className="botao botao-secundario" onClick={() => galeria.current?.click()} disabled={preparando}>
-          <span aria-hidden="true">🖼</span> Escolher da galeria
+          <IconeGaleria /> Escolher da galeria
         </button>
         {foto && (
           <button type="button" className="botao botao-primario" onClick={onContinuar} disabled={preparando}>

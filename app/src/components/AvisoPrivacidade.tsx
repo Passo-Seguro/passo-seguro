@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { gravarLocal, lerLocal } from '../lib/armazenamento';
+import { IconeEscudo } from './Icones';
 
 const CHAVE = 'passo-seguro.aviso-privacidade-visto';
 
@@ -11,7 +12,9 @@ export function AvisoPrivacidade() {
 
   return (
     <section className="aviso-privacidade" aria-labelledby="titulo-aviso-privacidade">
-      <h2 id="titulo-aviso-privacidade">Sua privacidade</h2>
+      <h2 id="titulo-aviso-privacidade">
+        <IconeEscudo width="1.1em" height="1.1em" /> Sua privacidade
+      </h2>
       <p>
         Para registrar um problema, guardamos a <strong>foto</strong>, o <strong>local</strong> (no mapa público ele
         aparece arredondado, a cerca de 100 m), o <strong>texto</strong> que você escrever e um{' '}
