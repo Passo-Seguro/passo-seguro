@@ -1,0 +1,14 @@
+# OPT-IN, só para desenvolvimento local: liga a visão e o assistente FALSOS.
+#
+#   docker compose -f docker-compose.dev.yml -f docker-compose.fakes.yml up --build
+#
+# Use quando os serviços reais (visão, assistente) ainda não existem na sua máquina.
+# CUIDADO: na visão falsa a categoria sai do hash da imagem, NÃO do modelo; no assistente
+# falso as respostas são fixas. Nada disso serve para demonstração: o que parece "erro do
+# modelo" é só o fake. A API avisa no log (modo_fake_ativo), em GET /health ("modo_fake" e
+# "alertas") e na métrica passo_seguro_modo_fake.
+services:
+  api:
+    environment:
+      USE_FAKE_VISAO: "true"
+      USE_FAKE_ASSISTENTE: "true"

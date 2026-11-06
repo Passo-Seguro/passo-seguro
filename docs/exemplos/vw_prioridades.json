@@ -1,0 +1,18 @@
+[
+  {
+    "subprefeitura": "Pinheiros",
+    "prioridade": "media",
+    "relatos_abertos": 38,
+    "relatos_por_categoria": {"buraco": 5, "piso_danificado": 14, "obstaculo": 11, "veiculo_na_calcada": 8},
+    "tempo_medio_ate_reparo_dias": null,
+    "atualizado_em": "2026-11-04T06:00:00-03:00"
+  },
+  {
+    "subprefeitura": "Sé",
+    "prioridade": "alta",
+    "relatos_abertos": 69,
+    "relatos_por_categoria": {"buraco": 12, "piso_danificado": 31, "obstaculo": 9, "veiculo_na_calcada": 17},
+    "tempo_medio_ate_reparo_dias": 41.5,
+    "atualizado_em": "2026-11-04T06:00:00-03:00"
+  }
+]

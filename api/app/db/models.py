@@ -8,7 +8,7 @@ from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.dominio import Categoria, FonteRelato, Prioridade, StatusRelato
+from app.dominio import Categoria, FonteRelato, ModoDeteccao, Prioridade, StatusRelato
 
 
 def _em(coluna: str, valores) -> str:
@@ -23,6 +23,7 @@ class Relato(Base):
         CheckConstraint(_em("status", StatusRelato), name="status_valido"),
         CheckConstraint(_em("fonte", FonteRelato), name="fonte_valida"),
         CheckConstraint(_em("prioridade", Prioridade), name="prioridade_valida"),
+        CheckConstraint(_em("modo_deteccao", ModoDeteccao), name="modo_deteccao_valido"),
         CheckConstraint("confianca >= 0 AND confianca <= 1", name="confianca_entre_0_e_1"),
         CheckConstraint("confirmacoes >= 0", name="confirmacoes_nao_negativas"),
         Index("ix_relatos_localizacao", "localizacao", postgresql_using="gist"),
@@ -56,3 +57,12 @@ class Relato(Base):
     # Dado fictício gerado por scripts/gerar_dados_simulados.py. Não aparece na API; serve
     # para separar e apagar (docs/dados-simulados.md).
     simulado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # Como a categoria foi obtida: real | fake | nenhuma (ver ModoDeteccao). INTERNO: não vai
+    # para o contrato nem para nenhuma resposta; serve para achar e apagar relatos criados sob
+    # visão fake (docs/modo-deteccao.md).
+    modo_deteccao: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        default=ModoDeteccao.NENHUMA.value,
+        server_default=ModoDeteccao.NENHUMA.value,
+    )

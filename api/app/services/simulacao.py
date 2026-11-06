@@ -21,7 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.db.models import Relato
-from app.dominio import Categoria, FonteRelato, Prioridade, StatusRelato
+from app.dominio import Categoria, FonteRelato, ModoDeteccao, Prioridade, StatusRelato
 from app.storage import Armazenamento
 
 FOTO_PLACEHOLDER = "simulados/placeholder.png"
@@ -219,6 +219,7 @@ def gerar_relatos(
                 "subprefeitura": area.nome if encaminhado else None,
                 "prioridade": prioridade,
                 "simulado": True,
+                "modo_deteccao": ModoDeteccao.NENHUMA.value,  # dado de script, sem visão
             }
         )
     return linhas

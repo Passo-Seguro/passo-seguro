@@ -40,3 +40,16 @@ class FonteRelato(StrEnum):
 
 # Tamanho máximo de foto/imagem aceito (decisão provisória do contrato): 10 MiB.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class ModoDeteccao(StrEnum):
+    """Como a categoria de um relato foi obtida. Dado INTERNO: não entra no contrato nem em resposta.
+
+    - `real`: a visão real (serviço de visão) respondeu;
+    - `fake`: o cliente fake respondeu (a categoria vem do hash da imagem, não do modelo);
+    - `nenhuma`: a visão falhou ou não detectou nada (e os relatos simulados por script).
+    """
+
+    REAL = "real"
+    FAKE = "fake"
+    NENHUMA = "nenhuma"

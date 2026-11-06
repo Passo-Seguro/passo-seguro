@@ -198,7 +198,26 @@ def test_corpo_muito_maior_que_o_limite_e_recusado_antes_de_ler(client):
 
 def test_coordenadas_fora_de_sao_paulo_422(client, jpeg):
     r = client.post("/relatos", data=_form(lat="-22.9", lon="-43.2"), files=_foto(jpeg))
-    assert r.status_code == 422 and r.json()["detalhes"][0]["campo"] == "lat"
+    assert r.status_code == 422
+    # código próprio: o app mostra "Você está fora de São Paulo; toque no mapa dentro da cidade"
+    assert r.json() == {
+        "codigo": "fora_da_area",
+        "mensagem": "Os dados enviados não são válidos.",
+        "detalhes": [
+            {"campo": "lat", "problema": "a localização está fora da área de atendimento (município de São Paulo)"}
+        ],
+    }
+
+
+def test_so_o_fora_da_area_usa_o_codigo_proprio_os_outros_422_continuam_dados_invalidos(client, jpeg):
+    for dados in (_form(lat="95"), _form(fonte="drone")):
+        r = client.post("/relatos", data=dados, files=_foto(jpeg))
+        assert r.status_code in (400, 422)
+        assert r.json()["codigo"] != "fora_da_area"
+    r = client.post("/relatos", data=_form(), files=_foto(b"isto nao e uma imagem"))
+    assert r.status_code == 422 and r.json()["codigo"] == "dados_invalidos"
+    r = client.post("/relatos", data=_form(descricao="x" * 1001), files=_foto(jpeg))
+    assert r.status_code == 422 and r.json()["codigo"] == "dados_invalidos"
 
 
 @pytest.mark.parametrize("lat,lon", [("200", "-46.6"), ("-23.5", "-200"), ("nan", "-46.6"), ("inf", "-46.6")])

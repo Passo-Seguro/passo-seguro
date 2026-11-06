@@ -17,7 +17,7 @@ from app.clients.visao import ClienteVisao, VisaoIndisponivel
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.deps import get_armazenamento, get_visao
-from app.dominio import FonteRelato, StatusRelato
+from app.dominio import FonteRelato, ModoDeteccao, StatusRelato
 from app.erros import ErroApi
 from app.schemas.comum import Erro
 from app.schemas.relatos import ListaRelatos, Paginacao, RelatoCriado
@@ -30,13 +30,18 @@ log = logging.getLogger("passo_seguro.relatos")
 router = APIRouter(tags=["Relatos"])
 
 
-def validar_coordenadas(lat: float, lon: float, settings: Settings) -> None:
-    """422 se o ponto estiver fora da área de atendimento (padrão: município de São Paulo)."""
+def fora_da_area(lat: float, lon: float, settings: Settings) -> bool:
+    """True se o ponto estiver fora da área de atendimento (padrão: município de São Paulo)."""
     caixa = settings.caixa_permitida
-    if caixa is not None and not caixa.contem(lat, lon):
+    return caixa is not None and not caixa.contem(lat, lon)
+
+
+def validar_coordenadas(lat: float, lon: float, settings: Settings) -> None:
+    """422 `fora_da_area` se o ponto estiver fora da área (usado só em POST /relatos)."""
+    if fora_da_area(lat, lon, settings):
         raise ErroApi(
             422,
-            "dados_invalidos",
+            "fora_da_area",  # código próprio: o app mostra "toque no mapa dentro da cidade"
             "Os dados enviados não são válidos.",
             [
                 {
@@ -110,12 +115,14 @@ def criar_relato(
     # A visão pode estar fora do ar ou não detectar nada: o relato NÃO se perde. Fica sem
     # categoria e sem confiança (nulos), e a triagem decide o que fazer.
     categoria = confianca = None
+    modo = ModoDeteccao.NENHUMA
     try:
         deteccoes = visao.detectar(imagem.conteudo, imagem.content_type)
     except VisaoIndisponivel:
         deteccoes = []
     if deteccoes:
         categoria, confianca = deteccoes[0].classe.value, deteccoes[0].confianca
+        modo = visao.modo  # real ou fake; falha ou lista vazia ficam em `nenhuma`
 
     autor_hash = hash_autor(autor_id, settings.salt_autor) if (settings.habilitar_rc2 and autor_id) else None
     try:
@@ -130,6 +137,7 @@ def criar_relato(
             categoria=categoria,
             confianca=confianca,
             autor_hash=autor_hash,
+            modo_deteccao=modo,
         )
     except Exception:
         db.rollback()

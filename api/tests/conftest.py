@@ -61,7 +61,9 @@ def _migrar(engine, destino: str = "head") -> None:
 def recriar_banco(url: str) -> None:
     """Cria o banco (se faltar) e deixa só o schema das migrações, do zero."""
     alvo = make_url(url)
-    admin = create_engine(alvo.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    admin = create_engine(
+        alvo.set(database="postgres"), isolation_level="AUTOCOMMIT", connect_args={"connect_timeout": 5}
+    )
     with admin.connect() as c:
         if not c.scalar(text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": alvo.database}):
             c.execute(text(f'CREATE DATABASE "{alvo.database}"'))
@@ -114,6 +116,7 @@ def criar_relato_db(fabrica_sessao):
         prioridade: str | None = None,
         confirmacoes: int = 0,
         simulado: bool = False,
+        modo_deteccao: str = "nenhuma",
         id: uuid.UUID | None = None,
     ) -> uuid.UUID:
         relato_id = id or uuid.uuid4()
@@ -134,6 +137,7 @@ def criar_relato_db(fabrica_sessao):
                     prioridade=prioridade,
                     autor_hash=autor_hash,
                     simulado=simulado,
+                    modo_deteccao=modo_deteccao,
                 )
             )
             sessao.commit()
@@ -167,6 +171,8 @@ def settings(tmp_path: Path) -> Settings:
         media_dir=tmp_path / "fotos",
         public_base_url="http://testserver",
         use_fake_visao=True,
+        use_fake_assistente=True,
+        painel_export_path=API_DIR.parent / "docs" / "exemplos" / "vw_prioridades.json",
     )
 
 

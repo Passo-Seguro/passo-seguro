@@ -25,10 +25,20 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 LOG_REQUISICAO = logging.getLogger("passo_seguro.requisicao")
 
 # Campos extras que podem aparecer no JSON do log (lista fechada, de propósito).
-_CAMPOS_PERMITIDOS = ("metodo", "rota", "status", "duracao_ms", "request_id", "tipo_erro", "local_erro", "evento")
+_CAMPOS_PERMITIDOS = (
+    "metodo",
+    "rota",
+    "status",
+    "duracao_ms",
+    "request_id",
+    "tipo_erro",
+    "local_erro",
+    "evento",
+    "servico",
+)
 
 # Rotas que não geram linha de log (verificação de vida, raspagem de métricas).
-_SEM_LOG = {"/saude", "/metrics"}
+_SEM_LOG = {"/saude", "/health", "/metrics"}
 
 
 class FormatadorJson(logging.Formatter):
@@ -91,6 +101,12 @@ class Metricas:
             "passo_seguro_http_requests_total",
             "Total de requisições HTTP, por método, rota e status.",
             ["metodo", "rota", "status"],
+            registry=self.registro,
+        )
+        self.modo_fake = Gauge(
+            "passo_seguro_modo_fake",
+            "1 quando o serviço (visao, assistente) está em MODO FAKE; 0 quando é o real ou está fora do ar.",
+            ["servico"],
             registry=self.registro,
         )
         self.em_andamento = Gauge(

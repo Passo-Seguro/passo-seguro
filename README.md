@@ -182,11 +182,23 @@ Os testes usam um Postgres+PostGIS de teste (`TEST_DATABASE_URL`, padrão `passo
 
 **Observabilidade:** `GET /metrics` (formato Prometheus, exige `Authorization: Bearer <METRICS_TOKEN>`) traz a latência por rota, o total de requisições por rota e status e as requisições em andamento. Os logs saem em JSON, uma linha por requisição, **sem** foto, descrição, parâmetros de consulta (coordenadas) nem cabeçalhos.
 
+**Integração com os outros serviços** (todos por variável de ambiente; veja `api/.env.example`):
+
+| Serviço | Variáveis | Se não estiver no ar |
+|---|---|---|
+| Visão (`POST /deteccoes` do colega) | `VISAO_URL`, `VISAO_TOKEN`, `VISAO_TIMEOUT_S`, `USE_FAKE_VISAO` | O relato é criado do mesmo jeito, com `categoria` e `confianca` nulas. |
+| Assistente (`POST /assistente` do colega) | `ASSISTENTE_URL`, `ASSISTENTE_TOKEN`, `ASSISTENTE_TIMEOUT_S`, `USE_FAKE_ASSISTENTE`, `SP156_URL` | `POST /assistente` responde `recusou: true` com mensagem padrão e o link do [SP156](https://sp156.prefeitura.sp.gov.br/). |
+| Pipeline de dados (view `vw_prioridades`) | `PAINEL_EXPORT_PATH` | `GET /painel` responde 404 (`painel_indisponivel`). |
+
+`USE_FAKE_VISAO` e `USE_FAKE_ASSISTENTE` trocam o serviço por um falso e ficam **desligados por padrão** (código, `.env.example` e `docker-compose.dev.yml`). A "classe" da visão falsa sai do hash da imagem, **não** da foto: se um avaliador testar com ela, vai parecer erro do modelo. **Não use em demonstração nem em produção.** Para desenvolver sem os serviços reais, ligue de propósito: `docker compose -f docker-compose.dev.yml -f docker-compose.fakes.yml up`. Com qualquer fake ligado a API avisa no log (`modo_fake_ativo`, nível WARNING), em `GET /health` (`modo_fake` e `alertas`; continua 200) e na métrica `passo_seguro_modo_fake{servico=...}` (1 = fake), para o DevOps montar um alerta. O painel é um **arquivo JSON**: uma lista de objetos no formato `PrioridadeSubprefeitura` do contrato (exemplo fictício em [`docs/exemplos/vw_prioridades.json`](./docs/exemplos/vw_prioridades.json); formato a confirmar com quem faz Big Data). Arquivo existente mas fora do schema: 503 `painel_invalido`.
+
 **Emenda rc2 do contrato:** `GET /relatos/proximos`, `GET /meus-relatos`, `PATCH /relatos/{id}`, `autor_id` e `X-Device-Token` ficam isolados em `api/app/routers/rc2.py` e só existem com `HABILITAR_RC2=true` (ligado no `docker-compose.dev.yml`, desligado por padrão até o grupo aprovar o PR `feat/contratos-rc2`).
 
 As dependências têm versões fixas em `api/requirements.txt` e `api/requirements-dev.txt`, geradas com `pip-compile` a partir dos arquivos `.in` (para atualizar: `pip-compile --strip-extras requirements.in`).
 
 **Relatos simulados** para o mapa não começar vazio: [`docs/dados-simulados.md`](./docs/dados-simulados.md).
+
+**Relatos criados sob visão fake:** a coluna interna `relatos.modo_deteccao` (`real`, `fake` ou `nenhuma`) separa o que veio do modelo do que veio do detector de mentira; consulta e limpeza em [`docs/modo-deteccao.md`](./docs/modo-deteccao.md).
 
 ## Licença
 
