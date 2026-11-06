@@ -80,6 +80,11 @@ O contrato completo está em [`openapi.yaml`](./openapi.yaml).
 | `POST /assistente` | App | Pergunta → JSON com resposta, fontes e recusa |
 | `GET /painel` | App | Prioridades por subprefeitura, lidas da Ouro exportada |
 | `GET /relatos?status=novo` | Triagem e Airflow | Relatos para triagem e para a coleta diária |
+| `GET /relatos/proximos` | App | Relatos num raio, para o mapa público (localização arredondada a ~100 m) *(rc2)* |
+| `GET /meus-relatos` | App | Relatos do próprio cidadão, pelo id anônimo do aparelho *(rc2)* |
+| `PATCH /relatos/{id}` | App e triagem | App corrige a categoria; triagem atualiza status, subprefeitura, prioridade e confirmações *(rc2)* |
+
+Os contratos marcados com *(rc2)* são a emenda **1.0.0-rc2**, em revisão: só valem depois da aprovação do grupo.
 
 ### Classes de problema
 
@@ -151,6 +156,12 @@ curl -H "Authorization: Bearer token-ficticio" "http://localhost:4010/relatos?st
 ```
 
 Para escolher um exemplo, use `-H "Prefer: example=obstaculo"`; para um código de resposta, `-H "Prefer: code=422"`.
+
+**Bateria de curls** contra o mock (com o mock rodando em outro terminal):
+
+```bash
+scripts/testar-mock.sh
+```
 
 ## Como rodar
 
