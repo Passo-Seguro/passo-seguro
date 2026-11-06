@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+lighthouse-*.json
+lighthouse-*.html
+
+# a regra "lib/" da raiz (Python) nao vale para o codigo do app
+!/src/lib/
