@@ -26,10 +26,16 @@ ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
 # ---------- Etapa 2: servidor ----------
-FROM nginxinc/nginx-unprivileged:1.28-alpine AS servidor
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS servidor
 
 # Só estas duas variáveis passam pelo envsubst; as $variáveis do nginx ficam intactas.
 ENV NGINX_ENVSUBST_FILTER='^(API_UPSTREAM|METRICS_TOKEN)$'
+
+# A imagem base sai com pacotes do Alpine (openssl, curl, expat, zlib, musl, o próprio nginx…) já
+# com correção de segurança publicada: atualiza todos no build (precisa de root, uid 0; volta ao 101).
+USER 0
+RUN apk upgrade --no-cache
+USER 101
 
 # O modelo vira /etc/nginx/conf.d/default.conf na partida (a imagem deixa conf.d com dono
 # nginx, então o usuário 101 consegue gravar). O default.conf da imagem sai do caminho.
@@ -49,4 +55,4 @@ USER 101
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
+  CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
