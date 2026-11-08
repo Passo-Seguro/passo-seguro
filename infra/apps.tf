@@ -14,6 +14,7 @@ locals {
     "service-token"    = azurerm_key_vault_secret.gerado["service-token"].versionless_id
     "device-token"     = azurerm_key_vault_secret.gerado["device-token"].versionless_id
     "salt-autor"       = azurerm_key_vault_secret.gerado["salt-autor"].versionless_id
+    "metrics-token"    = azurerm_key_vault_secret.gerado["metrics-token"].versionless_id # o mesmo que o app usa
     "assistente-token" = azurerm_key_vault_secret.assistente_token.versionless_id
   }
 }
@@ -48,6 +49,17 @@ resource "azurerm_container_app_environment_storage" "fotos" {
   share_name                   = azurerm_storage_share.fotos.name
   access_key                   = azurerm_storage_account.main.primary_access_key
   access_mode                  = "ReadWrite"
+}
+
+# Volume do painel: o Azure Files "painel", montado SOMENTE LEITURA na API em /data/painel.
+# Quem grava o arquivo é o pipeline de dados (ver infra/README.md, "Subir o arquivo do painel").
+resource "azurerm_container_app_environment_storage" "painel" {
+  name                         = "painel"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  account_name                 = azurerm_storage_account.main.name
+  share_name                   = azurerm_storage_share.painel.name
+  access_key                   = azurerm_storage_account.main.primary_access_key
+  access_mode                  = "ReadOnly"
 }
 
 # ---------- API ----------
@@ -103,6 +115,14 @@ resource "azurerm_container_app" "api" {
       mount_options = "uid=10001,gid=10001,file_mode=0660,dir_mode=0770"
     }
 
+    volume {
+      name         = "painel"
+      storage_name = azurerm_container_app_environment_storage.painel.name
+      storage_type = "AzureFile"
+      # Só leitura (o share foi registrado como ReadOnly); o arquivo pertence ao usuário da API.
+      mount_options = "uid=10001,gid=10001,file_mode=0440,dir_mode=0550"
+    }
+
     container {
       name   = "api"
       image  = var.image_api
@@ -119,6 +139,17 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "MEDIA_DIR"
         value = "/data/fotos"
+      }
+      # A emenda rc2 do contrato (mapa por perto, meus relatos, correção de categoria) é o que o
+      # app usa; sem isto essas rotas não existem na API.
+      env {
+        name  = "HABILITAR_RC2"
+        value = "true"
+      }
+      # Arquivo JSON do painel (formato: docs/exemplos/vw_prioridades.json), no share "painel".
+      env {
+        name  = "PAINEL_EXPORT_PATH"
+        value = "/data/painel/vw_prioridades.json"
       }
       env {
         name  = "ASSISTENTE_URL"
@@ -144,6 +175,11 @@ resource "azurerm_container_app" "api" {
         name        = "DEVICE_TOKEN"
         secret_name = "device-token"
       }
+      # Mesmo segredo do app: o nginx confere em /metrics/api e repassa o cabeçalho; a API confere de novo.
+      env {
+        name        = "METRICS_TOKEN"
+        secret_name = "metrics-token"
+      }
       env {
         name        = "SALT_AUTOR"
         secret_name = "salt-autor"
@@ -156,6 +192,10 @@ resource "azurerm_container_app" "api" {
       volume_mounts {
         name = "fotos"
         path = "/data/fotos"
+      }
+      volume_mounts {
+        name = "painel"
+        path = "/data/painel"
       }
 
       # A partida inclui "alembic upgrade head"; a startup_probe dá tempo (até ~2 min) antes
