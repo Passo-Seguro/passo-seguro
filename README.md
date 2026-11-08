@@ -115,7 +115,7 @@ O mesmo nome vale no modelo de visão, no banco, na triagem, no robô e nos grá
 passo-seguro/
 ├── app/          # PWA (front-end)
 ├── api/          # API (FastAPI)
-├── infra/        # Terraform, docker compose, pipeline de CI/CD
+├── infra/        # Terraform da nuvem (ver infra/README.md), docker compose, pipeline de CI/CD
 ├── openapi.yaml  # contratos de API
 └── README.md
 ```
