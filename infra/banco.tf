@@ -68,6 +68,34 @@ resource "azurerm_postgresql_flexible_server_configuration" "extensoes" {
   value     = "POSTGIS"
 }
 
+# Auditoria básica de conexões, pedida pelas verificações do Trivy (AVD-AZU-0019, 0021 e 0024).
+# O Azure não aceita duas alterações de parâmetro ao mesmo tempo no mesmo servidor (erro de
+# "servidor ocupado"); por isso cada parâmetro depende do anterior e o Terraform aplica um
+# por vez. Não troque por um for_each.
+resource "azurerm_postgresql_flexible_server_configuration" "log_connections" {
+  name      = "log_connections"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+
+  depends_on = [azurerm_postgresql_flexible_server_configuration.extensoes]
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "log_checkpoints" {
+  name      = "log_checkpoints"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+
+  depends_on = [azurerm_postgresql_flexible_server_configuration.log_connections]
+}
+
+resource "azurerm_postgresql_flexible_server_configuration" "connection_throttle" {
+  name      = "connection_throttle.enable"
+  server_id = azurerm_postgresql_flexible_server.main.id
+  value     = "on"
+
+  depends_on = [azurerm_postgresql_flexible_server_configuration.log_checkpoints]
+}
+
 resource "azurerm_postgresql_flexible_server_database" "passo_seguro" {
   name      = "passo_seguro"
   server_id = azurerm_postgresql_flexible_server.main.id

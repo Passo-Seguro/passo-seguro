@@ -1,6 +1,7 @@
 # Storage account: share "fotos" (Azure Files, montado na API) e container privado
 # "ouro-export" (camada Ouro exportada pelo pipeline de dados).
 
+#trivy:ignore:AVD-AZU-0012 Firewall aberto de propósito: o Databricks lê o container "ouro-export" de fora da VNet (ver comentário abaixo).
 resource "azurerm_storage_account" "main" {
   name                = "stpassoseguro${local.sufixo}"
   location            = azurerm_resource_group.main.location
@@ -18,7 +19,6 @@ resource "azurerm_storage_account" "main" {
   # identidade gerenciada nem Entra ID para o volume). Por isso a chave fica habilitada.
   # Ela só é lida pelo Terraform e gravada no ambiente de Container Apps; não vai ao
   # Key Vault, ao git nem aos outputs. Para trocar, gire a chave na conta e rode o apply.
-  #trivy:ignore:AVD-AZU-0012 A chave é exigida pela montagem do Azure Files em Container Apps (ver comentário acima).
   shared_access_key_enabled = true
 
   # Sem bloco network_rules: o firewall fica aberto (padrão) de propósito, porque o Databricks

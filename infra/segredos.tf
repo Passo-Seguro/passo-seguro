@@ -3,6 +3,8 @@
 # outputs. Os Container Apps leem os segredos por referência, com a identidade
 # id-passoseguro-apps (ver identidade.tf).
 
+#trivy:ignore:AVD-AZU-0013 Acesso público aberto de propósito no MVP (private endpoint só em produção real); o acesso exige Entra ID + RBAC.
+#trivy:ignore:AVD-AZU-0016 Purge protection desligada de propósito para o destroy funcionar na assinatura de estudante.
 resource "azurerm_key_vault" "main" {
   name                = "kv-passoseguro-${local.sufixo}"
   location            = azurerm_resource_group.main.location
@@ -17,12 +19,10 @@ resource "azurerm_key_vault" "main" {
   # apagar o cofre de verdade na assinatura de estudante (com ela ligada o nome ficaria preso
   # até o fim da retenção). Em produção real: purge protection ligada.
   soft_delete_retention_days = 7
-  #trivy:ignore:AVD-AZU-0016 Desligada de propósito para o destroy funcionar na assinatura de estudante.
-  purge_protection_enabled = false
+  purge_protection_enabled   = false
 
   # Acesso público permitido: os Container Apps leem os segredos pelo endereço público do
   # cofre. Em produção real usaríamos private endpoint e fecharíamos o acesso público.
-  #trivy:ignore:AVD-AZU-0013 Aberto de propósito no MVP (ver comentário acima); o acesso exige Entra ID + RBAC.
   public_network_access_enabled = true
 
   tags = local.tags
@@ -44,6 +44,9 @@ resource "time_sleep" "rbac_executor" {
 }
 
 # ---------- Segredos gerados ----------
+# Sem expiration_date de propósito (o Trivy sugere, severidade LOW, AVD-AZU-0017): segredo
+# vencido não pode ser lido e derrubaria a API. A rotação é manual: terraform apply
+# -replace='random_password.gerado["service-token"]' e o app pega a versão nova.
 locals {
   segredos_gerados = toset(["service-token", "device-token", "metrics-token", "salt-autor"])
 }
