@@ -1,14 +1,17 @@
 """GET /painel: prioridades por subprefeitura (público).
 
-Etapa 1: devolve dados de exemplo. A leitura do arquivo exportado pelo pipeline de dados
-entra na etapa de integração.
+Lê o arquivo JSON exportado pelo pipeline de dados (PAINEL_EXPORT_PATH) e valida contra o
+schema do contrato. Sem arquivo: 404 `painel_indisponivel`.
 """
 
-from fastapi import APIRouter
+from typing import Annotated
 
+from fastapi import APIRouter, Depends
+
+from app.config import Settings, get_settings
 from app.schemas.comum import Erro
 from app.schemas.painel import PrioridadeSubprefeitura
-from app.services.exemplos import PAINEL_EXEMPLO
+from app.services.painel import ler_painel
 
 router = APIRouter(tags=["Painel"])
 
@@ -18,7 +21,7 @@ router = APIRouter(tags=["Painel"])
     response_model=list[PrioridadeSubprefeitura],
     operation_id="obterPainel",
     summary="Prioridades por subprefeitura",
-    responses={404: {"model": Erro}},
+    responses={404: {"model": Erro}, 503: {"model": Erro}},
 )
-def obter_painel() -> list[PrioridadeSubprefeitura]:
-    return PAINEL_EXEMPLO
+def obter_painel(settings: Annotated[Settings, Depends(get_settings)]) -> list[PrioridadeSubprefeitura]:
+    return ler_painel(settings.painel_export_path)

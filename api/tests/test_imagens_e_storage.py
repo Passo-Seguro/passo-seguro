@@ -82,3 +82,22 @@ def test_armazenamento_local_recusa_chave_perigosa(tmp_path, chave):
     armazenamento = ArmazenamentoLocal(tmp_path, "http://x.test")
     with pytest.raises(ValueError):
         armazenamento.salvar(chave, b"x", "image/jpeg")
+
+
+def test_tokens_sao_comparados_em_tempo_constante(monkeypatch):
+    """A comparação passa por hmac.compare_digest (e não por ==), inclusive para tokens de tamanhos diferentes."""
+    import hmac
+
+    from app import seguranca
+
+    chamadas = []
+    original = hmac.compare_digest
+
+    def espiao(a, b):
+        chamadas.append((a, b))
+        return original(a, b)
+
+    monkeypatch.setattr(seguranca.hmac, "compare_digest", espiao)
+    assert seguranca.tokens_iguais("abc", "abc") is True
+    assert seguranca.tokens_iguais("abc", "abcd") is False
+    assert chamadas == [(b"abc", b"abc"), (b"abc", b"abcd")]

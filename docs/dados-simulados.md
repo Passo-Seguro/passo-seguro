@@ -23,6 +23,7 @@ na tabela `relatos`, todas com a coluna interna **`simulado = true`**. Cada rela
 | `descricao` | Frases curtas por classe; 30% ficam vazias. Cerca de 7% trazem um telefone ou CPF **claramente falso** (`(11) 90000-0000`, `000.000.000-00`), para a triagem (RPA) poder demonstrar o mascaramento de dados pessoais. |
 | Foto | Todos apontam para uma única imagem cinza escrito "Foto simulada" (`simulados/placeholder.png`). Não há fotos reais nem de terceiros. |
 | Autor | Nenhum (`autor_hash` nulo). |
+| `modo_deteccao` | `nenhuma` (não passaram por visão nenhuma; ver [modo-deteccao.md](./modo-deteccao.md)). |
 
 Os relatos simulados **aparecem pela API como qualquer outro** (`GET /relatos`, mapa), porque o
 objetivo é justamente a demonstração. A coluna `simulado` é interna e nunca vai nas respostas.

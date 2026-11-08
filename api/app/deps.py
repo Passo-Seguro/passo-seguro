@@ -4,8 +4,8 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.clients.assistente import AssistenteFalso, ClienteAssistente
-from app.clients.visao import ClienteVisao, VisaoFalsa
+from app.clients.assistente import ClienteAssistente, criar_assistente
+from app.clients.visao import ClienteVisao, criar_visao
 from app.config import Settings, get_settings
 from app.storage import Armazenamento, criar_armazenamento
 
@@ -14,9 +14,9 @@ def get_armazenamento(settings: Annotated[Settings, Depends(get_settings)]) -> A
     return criar_armazenamento(settings)
 
 
-def get_visao() -> ClienteVisao:
-    return VisaoFalsa()
+def get_visao(settings: Annotated[Settings, Depends(get_settings)]) -> ClienteVisao:
+    return criar_visao(settings)
 
 
-def get_assistente() -> ClienteAssistente:
-    return AssistenteFalso()
+def get_assistente(settings: Annotated[Settings, Depends(get_settings)]) -> ClienteAssistente:
+    return criar_assistente(settings)

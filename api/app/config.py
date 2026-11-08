@@ -41,6 +41,9 @@ class Settings(BaseSettings):
 
     # Segredos. Vazio = recurso desligado (fecha por padrão).
     service_token: str = ""  # chamadas entre serviços (bearerAuth)
+    device_token: str = ""  # robô inspetor (X-Device-Token), só com a emenda rc2
+    metrics_token: str = ""  # raspagem do /metrics
+    salt_autor: str = ""  # sal do hash do autor_id (nunca logar o id nem o hash)
 
     # Fotos (armazenamento local em desenvolvimento).
     media_dir: Path = Path("./dados/fotos")
@@ -54,6 +57,33 @@ class Settings(BaseSettings):
     area_permitida: str = "-24.01,-46.84,-23.35,-46.36"
 
     max_upload_bytes: int = Field(default=MAX_UPLOAD_BYTES, gt=0)
+
+    # Serviço de visão (POST /deteccoes de outro serviço). Sem URL e sem fake, a visão fica
+    # "fora do ar": o relato é criado mesmo assim, com categoria e confiança nulas.
+    visao_url: str = ""
+    visao_token: str = ""
+    visao_timeout_s: float = Field(default=5.0, gt=0)
+    use_fake_visao: bool = False
+
+    # Assistente (LLM local + RAG, outro serviço). Sem URL e sem fake, ou se ele cair, o
+    # POST /assistente responde `recusou=true` com a mensagem padrão e o link do SP156.
+    assistente_url: str = ""
+    assistente_token: str = ""
+    assistente_timeout_s: float = Field(default=15.0, gt=0)
+    use_fake_assistente: bool = False
+    # Canal oficial da Prefeitura (portal SP156; também atende pelo telefone 156).
+    sp156_url: str = "https://sp156.prefeitura.sp.gov.br/"
+
+    # Arquivo JSON exportado pelo pipeline de dados (view vw_prioridades da camada Ouro).
+    # Formato: lista de objetos no schema PrioridadeSubprefeitura do contrato (a confirmar com
+    # quem faz Big Data). Sem o arquivo, GET /painel responde 404.
+    painel_export_path: Path | None = None
+
+    # Emenda rc2 do contrato (autor_id, X-Device-Token, /relatos/proximos, /meus-relatos e
+    # PATCH /relatos/{id}). DESLIGADA até o grupo aprovar o contrato rc2.
+    habilitar_rc2: bool = False
+
+    log_level: str = "INFO"
 
     @property
     def caixa_permitida(self) -> BoundingBox | None:

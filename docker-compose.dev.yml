@@ -2,6 +2,9 @@
 #
 #   docker compose -f docker-compose.dev.yml up --build
 #
+# Visão e assistente falsos (opt-in, só para desenvolvimento):
+#   docker compose -f docker-compose.dev.yml -f docker-compose.fakes.yml up --build
+#
 # A API sobe em http://localhost:8000 (documentação interativa em /docs), roda as migrações
 # do Alembic ao iniciar e guarda as fotos no volume "fotos".
 # Todos os valores abaixo são FICTÍCIOS e só valem para desenvolvimento local. Para mudar,
@@ -33,12 +36,30 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://passo:${DB_PASSWORD:-passo-dev}@db:5432/passo_seguro
       SERVICE_TOKEN: ${SERVICE_TOKEN:-token-servico-dev}
+      DEVICE_TOKEN: ${DEVICE_TOKEN:-token-robo-dev}
+      METRICS_TOKEN: ${METRICS_TOKEN:-token-metricas-dev}
+      SALT_AUTOR: ${SALT_AUTOR:-sal-de-desenvolvimento}
+      # Emenda rc2 do contrato (autor_id, robô com token, /relatos/proximos, /meus-relatos, PATCH).
+      # Ligada aqui para o app poder desenvolver; no código o padrão é desligada até o grupo aprovar.
+      HABILITAR_RC2: ${HABILITAR_RC2:-true}
+      # Visão e assistente: por padrão NÃO são falsos. Sem VISAO_URL a visão fica "fora do ar" (o relato
+      # é criado sem categoria) e, sem ASSISTENTE_URL, o assistente responde a recusa padrão com o
+      # SP156. Para os falsos (só desenvolvimento): docker-compose.fakes.yml.
+      USE_FAKE_VISAO: ${USE_FAKE_VISAO:-false}
+      VISAO_URL: ${VISAO_URL:-}
+      VISAO_TOKEN: ${VISAO_TOKEN:-}
+      USE_FAKE_ASSISTENTE: ${USE_FAKE_ASSISTENTE:-false}
+      ASSISTENTE_URL: ${ASSISTENTE_URL:-}
+      ASSISTENTE_TOKEN: ${ASSISTENTE_TOKEN:-}
+      # Painel: arquivo exportado pelo pipeline de dados. Aqui, um exemplo fictício do repositório.
+      PAINEL_EXPORT_PATH: /data/painel/vw_prioridades.json
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - fotos:/data/fotos
+      - ./docs/exemplos/vw_prioridades.json:/data/painel/vw_prioridades.json:ro
     command:
       - sh
       - -c

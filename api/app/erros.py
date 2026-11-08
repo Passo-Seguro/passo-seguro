@@ -10,6 +10,7 @@ Regra de status para falhas de validação do FastAPI/Pydantic:
 """
 
 import logging
+import re
 
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
@@ -110,6 +111,9 @@ def _campo(erro: dict) -> str:
     if erro.get("type") in ("json_invalid", "model_attributes_type", "dict_type"):
         return "corpo"
     loc = [str(p) for p in erro.get("loc", ())]
+    if len(loc) == 2 and loc[0] == "header":
+        # 'x_autor_id' / 'x-autor-id' -> 'X-Autor-Id', como o cliente escreve o cabeçalho
+        return "-".join(parte.capitalize() for parte in re.split(r"[-_]", loc[1]))
     # Tira o primeiro nível (body/query/header/path) e fica com o nome do campo.
     return ".".join(loc[1:]) if len(loc) > 1 else (loc[0] if loc else "corpo")
 
