@@ -8,6 +8,11 @@
 # Este arquivo é incluído dentro do bloco "http" do nginx.conf da imagem.
 
 # ---------- Token de métricas ----------
+# A chave do segundo "map" é "Bearer <token>" e o padrão do nginx (bucket de 64 bytes) não
+# comporta nem um token de 48 caracteres: sem esta linha o "nginx -t" falha com "could not
+# build map_hash" e o contêiner nem sobe. 256 deixa folga para rotacionar por um token maior.
+map_hash_bucket_size 256;
+
 # Três etapas porque o nginx não tem "E" lógico: (1) o token está configurado?, (2) o
 # cabeçalho Authorization é exatamente "Bearer <token>"?, (3) as duas coisas juntas.
 # Sem a etapa 1, um token vazio aceitaria o cabeçalho "Bearer " (sem valor).
