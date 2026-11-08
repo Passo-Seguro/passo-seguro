@@ -1,0 +1,22 @@
+# Copie para infra/terraform.tfvars (o git ignora *.tfvars) e ajuste.
+# Todos os valores abaixo são FICTÍCIOS. Nenhum segredo real entra neste arquivo de exemplo.
+
+# Assinatura Azure for Students: só chilecentral, eastus, southcentralus, centralus e
+# canadacentral são permitidas, e o Postgres Flexible Server é restrito em eastus e
+# southcentralus. Usamos centralus para TUDO.
+location = "centralus"
+
+# Imagens publicadas à mão no GHCR antes do primeiro apply (ver README).
+image_api = "ghcr.io/passo-seguro/passo-seguro-api:bootstrap"
+image_app = "ghcr.io/passo-seguro/passo-seguro-app:bootstrap"
+
+# 0 = escala a zero (barato, com partida a frio); 1 = sempre no ar.
+min_replicas = 0
+
+# Serviço do assistente (LLM) no Railway. A URL e o token abaixo são fictícios; o token real
+# também pode vir por variável de ambiente: export TF_VAR_assistente_token=...
+assistente_url   = "https://assistente-exemplo.invalid"
+assistente_token = "token-ficticio-troque-pelo-do-railway"
+
+alert_email   = "equipe@exemplo.invalid"
+budget_amount = 10

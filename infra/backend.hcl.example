@@ -1,0 +1,12 @@
+# Copie para infra/backend.hcl (o git ignora) e ajuste. Valores FICTÍCIOS.
+# O state fica numa conta de armazenamento criada à mão no bootstrap (ver README).
+#
+#   terraform init -backend-config=backend.hcl
+resource_group_name  = "rg-passoseguro-tfstate"
+storage_account_name = "stpassosegurotfstate"
+container_name       = "tfstate"
+key                  = "prod.tfstate"
+
+# Autentica no state pelo Entra ID (az login), sem chave de conta. Exige o papel
+# "Storage Blob Data Contributor" na conta do state para quem roda o Terraform.
+use_azuread_auth = true
