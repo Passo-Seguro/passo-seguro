@@ -33,6 +33,11 @@ variable "assistente_token" {
   description = "Token do serviço do assistente (Railway). Vai para o Key Vault; nunca versione."
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(var.assistente_token) > 0
+    error_message = "assistente_token não pode ser vazio (o Key Vault não aceita segredo vazio)."
+  }
 }
 
 variable "alert_email" {
