@@ -33,10 +33,15 @@ ENV NGINX_ENVSUBST_FILTER='^(API_UPSTREAM|METRICS_TOKEN)$'
 
 # O modelo vira /etc/nginx/conf.d/default.conf na partida (a imagem deixa conf.d com dono
 # nginx, então o usuário 101 consegue gravar). O default.conf da imagem sai do caminho.
-RUN rm -f /etc/nginx/conf.d/default.conf
+# "worker_processes auto" conta os núcleos do HOST, não o limite do contêiner: num servidor de
+# 40 núcleos sobem 40 workers e estouram a memória do contêiner. Dois bastam para um PWA estático.
+RUN rm -f /etc/nginx/conf.d/default.conf \
+ && sed -i 's/^worker_processes .*/worker_processes 2;/' /etc/nginx/nginx.conf \
+ && grep -q '^worker_processes 2;' /etc/nginx/nginx.conf
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY seguranca.inc /etc/nginx/seguranca.inc
-COPY --chmod=755 docker/19-valida-variaveis.sh /docker-entrypoint.d/19-valida-variaveis.sh
+# 19: confere as variáveis antes do envsubst; 21: confere o resultado (e roda "nginx -t").
+COPY --chmod=755 docker/19-valida-variaveis.sh docker/21-confere-config.sh /docker-entrypoint.d/
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # O usuário "nginx" (uid 101) já vem na imagem; a porta é 8080 (portas < 1024 exigem root).
