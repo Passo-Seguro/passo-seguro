@@ -165,7 +165,40 @@ scripts/testar-mock.sh
 
 ## Como rodar
 
-Integração de ponta a ponta em construção (meta: 15/11). Por enquanto, a **API** já sobe em desenvolvimento.
+Dois ambientes com Docker, para fins diferentes:
+
+| Arquivo | Para quê | O que sobe |
+|---|---|---|
+| [`docker-compose.yml`](./docker-compose.yml) | **Produção rodando localmente**: o que vai para a nuvem, com o endurecimento de contêiner ligado | app (nginx + PWA), API e banco; só o app publica porta |
+| [`docker-compose.dev.yml`](./docker-compose.dev.yml) | **Desenvolvimento** da API | API e banco, com porta aberta para depurar |
+
+### Stack completa (app + API + banco), como em produção
+
+Precisa de Docker. Sobe tudo, aplica as migrações e serve o app em `http://localhost:8080`:
+
+```bash
+docker compose up --build
+docker compose ps                                  # os três devem ficar "healthy"
+curl http://localhost:8080/api/painel               # a API, atrás do nginx do app
+```
+
+O navegador fala só com o app. O nginx repassa `/api/*` para a API (`/api/painel` chega na API como `/painel`), nunca expõe `/api/metrics` (404) e serve a raspagem de métricas em `/metrics/api`, só com token:
+
+```bash
+curl -H "Authorization: Bearer token-metricas-local" http://localhost:8080/metrics/api
+```
+
+Os valores do compose (senha do banco, `METRICS_TOKEN`, `SERVICE_TOKEN`, `SALT_AUTOR`…) são **fictícios** e só valem para este teste local; para mudar, exporte a variável ou crie um `.env` ao lado do compose (ex.: `METRICS_TOKEN=outro-token docker compose up`). Para parar e apagar os dados: `docker compose down -v`.
+
+| Serviço | Porta | Rede | Endurecimento |
+|---|---|---|---|
+| `app` | 8080 publicada | `borda` | usuário 101, `read_only` (com `tmpfs` em `/tmp` e `/etc/nginx/conf.d`), 128 MB |
+| `api` | nenhuma | `borda` e `interna` | usuário 10001, `read_only` (com `tmpfs` em `/tmp`; só o volume `fotos` é gravável), 512 MB |
+| `db` | nenhuma | `interna` | usuário 999, `read_only` (com `tmpfs` em `/tmp` e `/run/postgresql`), 512 MB |
+
+Em todos: `no-new-privileges`, `cap_drop: [ALL]`, `restart: unless-stopped`, healthcheck, `depends_on` com `service_healthy` (`db` → `api` → `app`) e log `json-file` com rodízio (10 MB × 3 arquivos). A rede `interna` é `internal: true` (sem saída para a internet): o banco só é alcançado pela API.
+
+A API **confere** o `METRICS_TOKEN` em `/metrics` e só é alcançável pela rede interna, atrás do nginx. Nunca publique a porta 8000 da API em produção. Detalhes do nginx (variáveis, rotas, logs sem query string): [`app/README.md`](./app/README.md#docker).
 
 ### API (FastAPI + Postgres/PostGIS)
 
@@ -191,7 +224,7 @@ ruff check . && ruff format --check .                   # estilo
 
 Os testes usam um Postgres+PostGIS de teste (`TEST_DATABASE_URL`, padrão `passo_seguro_test` no banco do compose). Suba só o banco com `docker compose -f docker-compose.dev.yml up -d db`; sem banco, os testes que dependem dele são pulados (no CI, com `EXIGIR_BANCO=1`, viram falha). O teste de **contrato** (`tests/test_contrato.py`) sobe a API de verdade e usa o Schemathesis para conferir cada resposta contra o [`openapi.yaml`](./openapi.yaml); `OPENAPI_PATH=<arquivo>` aponta outro contrato (por exemplo, a emenda rc2).
 
-**Observabilidade:** `GET /metrics` (formato Prometheus, exige `Authorization: Bearer <METRICS_TOKEN>`) traz a latência por rota, o total de requisições por rota e status e as requisições em andamento. Os logs saem em JSON, uma linha por requisição, **sem** foto, descrição, parâmetros de consulta (coordenadas) nem cabeçalhos.
+**Observabilidade:** `GET /metrics` (formato Prometheus, exige `Authorization: Bearer <METRICS_TOKEN>`) traz a latência por rota, o total de requisições por rota e status, as requisições em andamento e as métricas do processo (CPU, memória, descritores de arquivo e coleta de lixo; estas só aparecem em Linux, ou seja, no contêiner). Os logs saem em JSON, uma linha por requisição, **sem** foto, descrição, parâmetros de consulta (coordenadas) nem cabeçalhos.
 
 **Integração com os outros serviços** (todos por variável de ambiente; veja `api/.env.example`):
 

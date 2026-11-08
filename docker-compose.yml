@@ -1,0 +1,163 @@
+# Stack de PRODUÇÃO rodando LOCALMENTE: as mesmas imagens que vão para a nuvem (app com nginx,
+# API, Postgres com PostGIS), com o endurecimento de contêiner ligado. É a evidência de que
+# "a stack sobe com docker compose". Para DESENVOLVER use o docker-compose.dev.yml.
+#
+#   docker compose up --build
+#   curl http://localhost:8080/api/painel
+#
+# O navegador fala só com o app (http://localhost:8080). O nginx do app repassa /api para a API
+# e protege a raspagem de métricas em /metrics/api. A API e o banco NÃO publicam porta.
+#
+# Todos os valores abaixo são FICTÍCIOS e só valem para este teste local. Para mudar, exporte a
+# variável (ex.: METRICS_TOKEN=...) ou crie um arquivo .env ao lado deste. Em nuvem os segredos
+# vêm do Key Vault (ver infra/README.md), nunca daqui.
+name: passo-seguro
+
+# Endurecimento comum a todos os serviços.
+x-endurecido: &endurecido
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  app:
+    <<: *endurecido
+    build:
+      context: ./app
+      args:
+        # Caminho relativo: a mesma imagem serve qualquer domínio.
+        VITE_API_URL: /api
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      # Nome do serviço na rede "borda" (em nuvem: http://ca-passoseguro-api).
+      API_UPSTREAM: http://api:8000
+      # Raspagem: curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8080/metrics/api
+      # Só aceita letras, números e . _ ~ + / = - (o nginx recusa a partida com outros caracteres).
+      METRICS_TOKEN: ${METRICS_TOKEN:-token-metricas-local}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    read_only: true
+    tmpfs:
+      - /tmp # pid e arquivos temporários do nginx
+      # onde o envsubst grava o default.conf na partida; o dono precisa ser o usuário do nginx
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks:
+      - borda
+
+  api:
+    <<: *endurecido
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql+psycopg://passo:${DB_PASSWORD:-passo-local}@db:5432/passo_seguro
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-token-servico-local}
+      DEVICE_TOKEN: ${DEVICE_TOKEN:-token-robo-local}
+      # O mesmo token do app: o nginx confere e repassa o cabeçalho, e a API confere de novo.
+      METRICS_TOKEN: ${METRICS_TOKEN:-token-metricas-local}
+      SALT_AUTOR: ${SALT_AUTOR:-sal-local-ficticio}
+      # O app usa os contratos da emenda rc2 (mapa por perto, meus relatos, correção de categoria).
+      HABILITAR_RC2: ${HABILITAR_RC2:-true}
+      # Visão e assistente reais ainda não existem aqui: sem URL a visão fica "fora do ar" e o
+      # assistente recusa com o link do SP156. NÃO ligue os falsos neste arquivo.
+      USE_FAKE_VISAO: "false"
+      USE_FAKE_ASSISTENTE: "false"
+      VISAO_URL: ${VISAO_URL:-}
+      VISAO_TOKEN: ${VISAO_TOKEN:-}
+      ASSISTENTE_URL: ${ASSISTENTE_URL:-}
+      ASSISTENTE_TOKEN: ${ASSISTENTE_TOKEN:-}
+      # Painel: arquivo exportado pelo pipeline de dados; aqui, o exemplo fictício do repositório.
+      PAINEL_EXPORT_PATH: /data/painel/vw_prioridades.json
+      # A foto é servida pelo próprio app, em /api/fotos/... (o nginx tira o prefixo /api).
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080/api}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+    # Mesmo comando do docker-compose.dev.yml e da infra: migra o banco e sobe a API. O "exec"
+    # faz o uvicorn virar o processo principal (recebe os sinais de parada).
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log
+    volumes:
+      - fotos:/data/fotos
+      - ./docs/exemplos/vw_prioridades.json:/data/painel/vw_prioridades.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/saude', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s # inclui o "alembic upgrade head"
+    read_only: true
+    tmpfs:
+      - /tmp # arquivos temporários de upload
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks:
+      - borda # recebe o tráfego do app e sai para a internet (visão e assistente)
+      - interna # fala com o banco
+
+  db:
+    <<: *endurecido
+    image: postgis/postgis:16-3.5
+    # Sem porta publicada: só a API alcança o banco, pela rede "interna".
+    environment:
+      POSTGRES_USER: passo
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-passo-local}
+      POSTGRES_DB: passo_seguro
+    # Roda direto como "postgres" (uid 999): assim dá para largar TODAS as capabilities e manter
+    # o sistema de arquivos somente leitura (o entrypoint padrão exigiria chown/gosu como root).
+    user: "999:999"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U passo -d passo_seguro"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql:uid=999,gid=999,mode=0775 # socket Unix do Postgres
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks:
+      - interna
+
+networks:
+  # Tem saída para a internet; é por aqui que o app publica a porta 8080.
+  borda:
+  # Sem rota para fora: só a API e o banco conversam aqui.
+  interna:
+    internal: true
+
+volumes:
+  pgdata:
+  fotos:
