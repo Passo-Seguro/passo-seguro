@@ -1,4 +1,4 @@
-# Storage account: share "fotos" (Azure Files, montado na API) e container privado
+# Storage account: shares "fotos" e "painel" (Azure Files, montados na API) e container privado
 # "ouro-export" (camada Ouro exportada pelo pipeline de dados).
 
 #trivy:ignore:AVD-AZU-0012 Firewall aberto de propósito: o Databricks lê o container "ouro-export" de fora da VNet (ver comentário abaixo).
@@ -32,6 +32,15 @@ resource "azurerm_storage_share" "fotos" {
   name               = "fotos"
   storage_account_id = azurerm_storage_account.main.id
   quota              = 5 # GB
+}
+
+# Painel de prioridades: o Container Apps só monta Azure Files (não monta blob). O pipeline de
+# dados grava aqui o vw_prioridades.json; a API monta o share SOMENTE LEITURA em /data/painel.
+# O container de blob "ouro-export" abaixo continua sendo a saída da parte de Big Data.
+resource "azurerm_storage_share" "painel" {
+  name               = "painel"
+  storage_account_id = azurerm_storage_account.main.id
+  quota              = 1 # GB
 }
 
 resource "azurerm_storage_container" "ouro_export" {

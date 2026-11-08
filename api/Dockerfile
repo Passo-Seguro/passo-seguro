@@ -22,7 +22,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     MEDIA_DIR=/data/fotos
 
-# Usuário sem privilégios e sem shell de login.
+# Correção de segurança já publicada no Debian para a zlib (a base slim ainda traz a anterior).
+# Sem fixar a versão de propósito: a versão fixa some do espelho quando sai a seguinte.
+# hadolint ignore=DL3008
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+ && rm -rf /var/lib/apt/lists/*
+
+# Usuário sem privilégios e sem shell de login (uid/gid 10001).
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
  && mkdir -p /data/fotos \
@@ -35,7 +42,7 @@ COPY --chown=app:app app ./app
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app alembic.ini ./
 
-USER app
+USER 10001:10001
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \

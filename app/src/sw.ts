@@ -7,6 +7,7 @@ import { ExpirationPlugin } from 'workbox-expiration';
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst } from 'workbox-strategies';
+import { NAO_E_PAGINA_DO_APP, ehRotaPublicaDaApi } from './api/base';
 import { API_URL } from './api/cliente';
 import { TAG_SYNC, processarFila } from './offline/fila';
 
@@ -21,7 +22,8 @@ precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 // Qualquer página do app (ex.: /meus-relatos) abre offline com o index.html em cache.
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')));
+// Fora /api e /metrics: são do servidor (ex.: abrir uma foto em /api/fotos/x.jpg numa aba).
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: NAO_E_PAGINA_DO_APP }));
 
 // Mapa: ladrilhos do OpenStreetMap já vistos continuam disponíveis sem rede.
 registerRoute(
@@ -36,12 +38,9 @@ registerRoute(
 );
 
 // Só dados PÚBLICOS da API (mapa e painel). Nada pessoal (meus-relatos) fica em cache.
-const origemDaApi = new URL(API_URL).origin;
+// API_URL pode ser relativo (/api): por isso a comparação resolve contra a origem do app.
 registerRoute(
-  ({ url, request }) =>
-    request.method === 'GET' &&
-    url.origin === origemDaApi &&
-    (url.pathname === '/relatos/proximos' || url.pathname === '/painel'),
+  ({ url, request }) => request.method === 'GET' && ehRotaPublicaDaApi(url, API_URL, self.location.origin),
   new NetworkFirst({
     cacheName: 'api-publica',
     networkTimeoutSeconds: 4,

@@ -7,9 +7,11 @@ title = "Passo Seguro"
 useDefault = true
 
 [[allowlists]]
-description = "Tokens de exemplo fictícios (README, mock e docker-compose.dev.yml)"
+description = "Tokens de exemplo fictícios (README, mock, docker-compose.dev.yml e docker-compose.yml)"
 regexes = [
   '''token-ficticio''',
   '''token-[a-z]+-dev''',
   '''sal-de-desenvolvimento''',
+  '''token-[a-z]+-local''',
+  '''sal-local-ficticio''',
 ]

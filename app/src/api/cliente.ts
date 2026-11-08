@@ -10,7 +10,10 @@ import type {
   RespostaAssistente,
 } from './tipos';
 
-/** Endereço da API (variável de build VITE_API_URL; por padrão, o mock do Prism). */
+/**
+ * Endereço da API (variável de build VITE_API_URL; por padrão, o mock do Prism).
+ * Pode ser relativo: na imagem de produção é `/api`, e o nginx do app repassa para a API.
+ */
 export const API_URL: string = (import.meta.env.VITE_API_URL ?? 'http://localhost:4010').replace(/\/+$/, '');
 
 // `fetch` é resolvido a cada chamada (e não na criação do cliente) para os testes poderem trocá-lo.

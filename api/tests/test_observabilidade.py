@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import sys
 
 import pytest
 from prometheus_client.parser import text_string_to_metric_families
@@ -49,6 +50,26 @@ def test_metrics_formato_prometheus(client):
     assert "# TYPE passo_seguro_http_request_duration_seconds histogram" in r.text
     assert "# TYPE passo_seguro_http_requests_total counter" in r.text
     assert "# TYPE passo_seguro_http_requests_in_progress gauge" in r.text
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="o coletor de processo lê /proc (só Linux)")
+def test_metrics_traz_cpu_e_memoria_do_processo(client):
+    amostras = _amostras(client)
+    assert _valor(amostras["process_cpu_seconds"], "process_cpu_seconds_total") > 0
+    assert _valor(amostras["process_resident_memory_bytes"], "process_resident_memory_bytes") > 0
+
+
+def test_metrics_traz_o_coletor_de_lixo_do_python(client):
+    assert "python_gc_objects_collected" in _amostras(client)
+
+
+def test_metricas_de_processo_nao_ganham_rotulos_de_requisicao(client):
+    """CPU e memória são do processo: sem rota, id nem parâmetro de consulta."""
+    client.get("/painel?lat=-23.5505&lon=-46.6333")
+    texto = client.get("/metrics", headers=H_METRICAS).text
+    linhas = [ln for ln in texto.splitlines() if ln.startswith(("process_", "python_gc_"))]
+    assert all("{" not in ln or "generation=" in ln for ln in linhas)
+    assert "-23.5505" not in texto and "-46.6333" not in texto
 
 
 def test_metrics_nao_esta_no_contrato_publico(client):

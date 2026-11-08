@@ -17,7 +17,8 @@ npm run dev                    # http://localhost:5173 (e o IP da sua rede, para
 ```
 
 `VITE_API_URL` define a API (padrão: `http://localhost:4010`). Para a API real, use o endereço dela
-(a API libera CORS pela variável `CORS_ORIGINS`).
+(a API libera CORS pela variável `CORS_ORIGINS`). Na imagem Docker o valor é `/api` (caminho relativo,
+mesmo domínio; veja a seção Docker).
 
 | Comando | O que faz |
 |---|---|
@@ -97,9 +98,34 @@ src/
 ## Docker
 
 ```bash
-docker build -t passo-seguro-app --build-arg VITE_API_URL=https://api.exemplo.invalid app/
-docker run --rm -p 8080:8080 passo-seguro-app     # http://localhost:8080
+docker build -t passo-seguro-app app/
+docker run --rm -p 8080:8080 \
+  -e API_UPSTREAM=http://host.docker.internal:8000 -e METRICS_TOKEN=token-ficticio \
+  passo-seguro-app                                # http://localhost:8080
 ```
 
-Build em duas etapas (Node → nginx sem privilégios, usuário 101, porta 8080). `VITE_API_URL` é só um
-endereço público e entra no JavaScript no build; a imagem não tem segredo nenhum.
+Build em duas etapas (Node → nginx sem privilégios, usuário 101, porta 8080). A imagem não tem segredo
+nenhum e serve qualquer domínio: o app chama a API pelo **caminho relativo `/api`** (`VITE_API_URL=/api`,
+o padrão do Dockerfile) e o nginx repassa para a API.
+
+O nginx é um modelo ([`nginx.conf.template`](./nginx.conf.template)): na partida a imagem troca só duas
+variáveis de **execução** e grava `conf.d/default.conf`.
+
+| Variável | Para quê |
+|---|---|
+| `API_UPSTREAM` | Obrigatória. Endereço interno da API, sem barra no fim (em produção, `http://ca-passoseguro-api`). O contêiner não sobe sem ela. |
+| `METRICS_TOKEN` | Segredo da raspagem. Vazia = `/metrics/api` responde sempre 401. Só aceita `A-Za-z0-9._~+/=-`. |
+
+Rotas do nginx:
+
+| Rota | Comportamento |
+|---|---|
+| `/api/*` | Proxy para `API_UPSTREAM` sem o prefixo `/api` (ex.: `/api/painel` → `/painel`). Corpo até 11 MB (a API aceita 10 MiB de foto). |
+| `/api/metrics` | 404: as métricas nunca saem por `/api`. |
+| `/metrics/api` | Só com `Authorization: Bearer <METRICS_TOKEN>`; sem ele, 401. Com ele, repassa para `/metrics` da API. |
+| `/healthz` | 200 sem log, para as sondas. |
+| resto | PWA (`index.html` para rotas do app), com os cabeçalhos de `seguranca.inc`. |
+
+O log de acesso sai em JSON **sem query string** (as consultas por perto levam coordenadas), sem `Referer`.
+O log de erro do nginx imprime a requisição inteira e não dá para filtrar, por isso fica no nível `crit`;
+falhas de upstream (502/504) aparecem no log de acesso.

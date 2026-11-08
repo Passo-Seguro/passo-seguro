@@ -6,7 +6,13 @@ duração e um id de requisição aleatório. Ele NÃO traz: corpo, foto, descri
 consulta (podem conter coordenadas exatas), cabeçalhos (X-Autor-Id, tokens) nem IP.
 
 Métricas: o rótulo `rota` também é o modelo da rota; rotas inexistentes viram "desconhecida"
-para a cardinalidade não explodir.
+para a cardinalidade não explodir. Além das métricas HTTP, o registro traz as do processo
+(CPU, memória, descritores de arquivo) e do coletor de lixo do Python, para o painel de
+operação ver saturação de recursos sem agente extra.
+
+Segurança do /metrics: a API confere o METRICS_TOKEN (routers/metricas.py) e, em produção, só é
+alcançável pela rede interna, atrás do nginx do app. O nginx expõe a raspagem em /metrics/api
+(com o mesmo token) e bloqueia /api/metrics. Nunca publique a porta da API diretamente.
 """
 
 import json
@@ -18,7 +24,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import PurePath
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
+from prometheus_client import CollectorRegistry, Counter, Gauge, GCCollector, Histogram, ProcessCollector
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -97,6 +103,11 @@ class Metricas:
             buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
             registry=self.registro,
         )
+        # CPU (process_cpu_seconds_total), memória (process_resident_memory_bytes) e descritores
+        # de arquivo do processo. O coletor lê /proc: no Linux (contêiner) funciona; no Windows
+        # ou macOS de desenvolvimento essas séries simplesmente não aparecem.
+        ProcessCollector(registry=self.registro)
+        GCCollector(registry=self.registro)
         self.requisicoes = Counter(
             "passo_seguro_http_requests_total",
             "Total de requisições HTTP, por método, rota e status.",
