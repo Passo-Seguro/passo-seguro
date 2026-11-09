@@ -94,11 +94,20 @@ jobs:
             --config p/dockerfile --config p/terraform \
             --metrics=off --error --sarif-output=semgrep.sarif
 
+      # O Semgrep põe no SARIF também o que foi suprimido com `# nosemgrep` (marcado como
+      # "suppressions"), e o Code Scanning o mostra como alerta aberto. Esses riscos já estão
+      # justificados no código e em infra/README.md ("Riscos aceitos"): tira do relatório.
+      - name: Tirar do relatório os riscos aceitos (nosemgrep)
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        run: |
+          jq '.runs[].results |= map(select((.suppressions // []) | length == 0))' \
+            semgrep.sarif > semgrep-filtrado.sarif
+
       - name: Enviar o relatório ao Code Scanning
-        if: ${{ !cancelled() && env.PODE_ENVIAR == 'true' && hashFiles('semgrep.sarif') != '' }}
+        if: ${{ !cancelled() && env.PODE_ENVIAR == 'true' && hashFiles('semgrep-filtrado.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
-          sarif_file: semgrep.sarif
+          sarif_file: semgrep-filtrado.sarif
           category: semgrep
 
   iac:
