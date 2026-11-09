@@ -6,6 +6,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Espera 7 dias antes de propor uma versão recém-publicada (pacote novo pode ser malicioso
+    # ou instável).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"
     groups:
@@ -16,6 +20,10 @@ updates:
     directory: /api
     schedule:
       interval: weekly
+    # Espera 7 dias antes de propor uma versão recém-publicada (pacote novo pode ser malicioso
+    # ou instável).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(api)"
 
@@ -23,6 +31,10 @@ updates:
     directory: /app
     schedule:
       interval: weekly
+    # Espera 7 dias antes de propor uma versão recém-publicada (pacote novo pode ser malicioso
+    # ou instável).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(app)"
 
@@ -30,6 +42,10 @@ updates:
     directory: /api
     schedule:
       interval: weekly
+    # Espera 7 dias antes de propor uma versão recém-publicada (pacote novo pode ser malicioso
+    # ou instável).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(api)"
 
@@ -37,5 +53,9 @@ updates:
     directory: /app
     schedule:
       interval: weekly
+    # Espera 7 dias antes de propor uma versão recém-publicada (pacote novo pode ser malicioso
+    # ou instável).
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(app)"
