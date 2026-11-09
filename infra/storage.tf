@@ -1,8 +1,9 @@
 # Storage account: shares "fotos" e "painel" (Azure Files, montados na API) e container privado
 # "ouro-export" (camada Ouro exportada pelo pipeline de dados).
 
+# Semgrep storage-queue-services-logging: o Queue Storage não é usado nesta conta (só Azure Files e Blob), então não há fila para registrar.
 #trivy:ignore:AVD-AZU-0012 Firewall aberto de propósito: o Databricks lê o container "ouro-export" de fora da VNet (ver comentário abaixo).
-resource "azurerm_storage_account" "main" {
+resource "azurerm_storage_account" "main" { # nosemgrep: terraform.azure.security.storage.storage-queue-services-logging.storage-queue-services-logging
   name                = "stpassoseguro${local.sufixo}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name

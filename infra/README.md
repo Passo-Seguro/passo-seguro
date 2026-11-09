@@ -123,7 +123,21 @@ tflint --init && tflint
 trivy config --severity HIGH,CRITICAL infra/
 ```
 
-O que o Trivy reporta e foi **aceito de propósito** está marcado com `#trivy:ignore:<ID>` e o motivo, acima do recurso: `AVD-AZU-0012` (firewall aberto do storage, por causa do Databricks), `AVD-AZU-0013` e `AVD-AZU-0016` (Key Vault público e sem purge protection, para o `destroy` funcionar) e `AVD-AZU-0047` (80/443 abertos no app público). Segredos sem data de validade (`AVD-AZU-0017`, LOW) também são de propósito: segredo vencido não pode ser lido e derrubaria a API.
+### Riscos aceitos
+
+O pipeline ([`ci.yml`](../.github/workflows/ci.yml)) reprova achados do Trivy (HIGH/CRITICAL) e do Semgrep. O que está abaixo foi **aceito de propósito** e fica marcado no código com o motivo: `#trivy:ignore:<ID>` logo acima do recurso (o Trivy exige o comentário colado nele) e `# nosemgrep: <ID exato da regra>` no fim da linha do `resource`. Nenhum `nosemgrep` é genérico.
+
+| Ferramenta | Regra | Recurso | Motivo | Evolução para produção |
+|---|---|---|---|---|
+| Trivy | `AVD-AZU-0012` | `azurerm_storage_account.main` (`storage.tf`) | Firewall aberto: o Databricks lê o container `ouro-export` de fora da VNet. | Private endpoint ou regras de IP. |
+| Trivy | `AVD-AZU-0013` | `azurerm_key_vault.main` (`segredos.tf`) | Acesso público aberto no MVP; o acesso exige Entra ID + RBAC. | Private endpoint e acesso público desligado. |
+| Trivy | `AVD-AZU-0016` | `azurerm_key_vault.main` (`segredos.tf`) | Purge protection desligada para o `destroy` funcionar na assinatura de estudante. | Purge protection ligada. |
+| Trivy | `AVD-AZU-0047` | `azurerm_network_security_group` `nsg-snet-aca` (`rede.tf`, 2 regras) | O app é público de propósito: só 80/tcp (redireciona para HTTPS) e 443/tcp, nada de administração. | Sem mudança (é o desenho do app). |
+| Semgrep | `terraform.azure.security.keyvault.keyvault-purge-enabled.keyvault-purge-enabled` | `azurerm_key_vault.main` (`segredos.tf`) | Mesmo motivo do `AVD-AZU-0016`: purge protection desligada para o `destroy` funcionar na assinatura de estudante. | Purge protection ligada. |
+| Semgrep | `terraform.azure.security.keyvault.keyvault-specify-network-acl.keyvault-specify-network-acl` | `azurerm_key_vault.main` (`segredos.tf`) | Mesmo motivo do `AVD-AZU-0013`: acesso público aberto no MVP. | `network_acls` com `default_action = "Deny"` + service endpoint na `snet-aca`. |
+| Semgrep | `terraform.azure.security.storage.storage-queue-services-logging.storage-queue-services-logging` | `azurerm_storage_account.main` (`storage.tf`) | O Queue Storage não é usado nesta conta (só Azure Files e Blob): não há fila para registrar. | Sem mudança, a menos que passe a usar filas. |
+
+**Segredos com validade** (`terraform.azure.security.keyvault.keyvault-ensure-secret-expires`, Trivy `AVD-AZU-0017`): em vez de aceitar o risco, os 7 segredos do Key Vault têm `expiration_date` **fixa** em `2027-06-30T00:00:00Z` (`local.validade_segredos` em `segredos.tf`; nunca `timeadd`/`timestamp`, que mudariam a cada plan). A data cobre a entrega da GS e a correção. **Depois dela o segredo vence, o Container App deixa de lê-lo e a API cai**: antes de 30/06/2027, renove a data ou rotacione os segredos e rode o `apply`.
 
 ## 4. O que copiar para o GitHub
 
@@ -192,7 +206,7 @@ Não são da infraestrutura, mas o que está descrito aqui depende delas:
 
 1. ~~**App (`app/`)**: nginx como *template* com proxy de `/api` e `VITE_API_URL=/api`.~~ Resolvido no PR #12: o nginx repassa `/api/` para `API_UPSTREAM`, bloqueia `/api/metrics` e serve `/metrics/api` com `METRICS_TOKEN`.
 2. ~~**API (`api/`)**: variáveis e migrações da `feat/api-integracao`, `METRICS_TOKEN` e `PAINEL_EXPORT_PATH`.~~ Resolvido: a branch já está na `main`, e a API agora recebe `METRICS_TOKEN` (mesmo segredo do app), `HABILITAR_RC2` e `PAINEL_EXPORT_PATH` (share `painel`). Falta só **subir o primeiro arquivo do painel** (seção 5); até lá `GET /painel` dá 404.
-3. **Workflow de deploy** (`.github/workflows/`): ainda não existe (só `api-tests.yml`); usará `id-passoseguro-github`.
+3. ~~**Workflow de deploy** (`.github/workflows/`)~~ Resolvido: o job `deploy` do [`ci.yml`](../.github/workflows/ci.yml) usa `id-passoseguro-github` (OIDC) e roda só em push na `main`.
 4. **Assistente**: `ASSISTENTE_URL` e `ASSISTENTE_TOKEN` já são entregues, mas o serviço do assistente não está em nenhum lugar da nuvem; sem ele `POST /assistente` responde a recusa padrão com o link do SP156. O mesmo vale para a visão (`VISAO_URL`/`VISAO_TOKEN` não são entregues ainda: sem eles o relato nasce sem categoria).
 
 ## Se o deploy der 403

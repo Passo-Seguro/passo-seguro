@@ -1,0 +1,436 @@
+# Pipeline do Passo Seguro: segredos, SAST, IaC, testes, imagens (com varredura) e deploy.
+#
+#   segredos ─┐
+#   sast      │
+#   iac       ├─► build [api, app] ─► deploy (só push na main)
+#   testes-api│
+#   testes-app┘
+#
+# Regras do arquivo:
+#  - toda action de terceiros fica fixada por SHA de commit (a versão vai no comentário);
+#  - nenhum segredo passa por `echo` e nenhum job de PR de fork usa secrets;
+#  - as varreduras rodam por CLI em container (sem gitleaks-action, que exige licença).
+# Como reproduzir cada varredura na sua máquina: seção "Pipeline" do README.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Uma execução por ref: um push novo cancela o anterior. Na main nunca cancelamos, para não
+# interromper um deploy no meio (o job "deploy" ainda tem o seu próprio grupo, mais abaixo).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  # Versões das ferramentas em container (tags fixas, nada de "latest").
+  GITLEAKS_IMAGEM: zricethezav/gitleaks:v8.30.1
+  SEMGREP_IMAGEM: semgrep/semgrep:1.184.0
+  TRIVY_IMAGEM: aquasec/trivy:0.76.2
+  TRIVY_VERSAO: v0.76.2
+  # Só quem tem token com escrita pode enviar SARIF/imagens: PR de fork e Dependabot recebem
+  # token somente leitura. Nesses casos as varreduras rodam, mas o envio é pulado.
+  PODE_ENVIAR: ${{ github.event.pull_request.head.repo.fork != true && github.actor != 'dependabot[bot]' }}
+
+jobs:
+  segredos:
+    name: Segredos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Baixar o histórico completo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Roda com o usuário do runner: o git do container não reclama do dono do diretório
+      # e o relatório não fica como root.
+      - name: Varrer o histórico (Gitleaks)
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/repo" -w /repo \
+            "$GITLEAKS_IMAGEM" git --config .gitleaks.toml --redact \
+            --report-format sarif --report-path gitleaks.sarif .
+
+      - name: Enviar o relatório ao Code Scanning
+        if: ${{ !cancelled() && env.PODE_ENVIAR == 'true' && hashFiles('gitleaks.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Sem token do Semgrep Cloud: só regras públicas e telemetria desligada. O texto vai
+      # para o log e o SARIF para um arquivo. As variáveis GIT_CONFIG_* liberam o diretório
+      # montado para o git do container (dono diferente).
+      - name: Analisar o código (Semgrep)
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
+            -v "$PWD:/src" -w /src "$SEMGREP_IMAGEM" \
+            semgrep scan --config p/default --config p/python --config p/typescript \
+            --config p/dockerfile --config p/terraform \
+            --metrics=off --error --sarif-output=semgrep.sarif
+
+      # O Semgrep põe no SARIF também o que foi suprimido com `# nosemgrep` (marcado como
+      # "suppressions"), e o Code Scanning o mostra como alerta aberto. Esses riscos já estão
+      # justificados no código e em infra/README.md ("Riscos aceitos"): tira do relatório.
+      - name: Tirar do relatório os riscos aceitos (nosemgrep)
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        run: |
+          jq '.runs[].results |= map(select((.suppressions // []) | length == 0))' \
+            semgrep.sarif > semgrep-filtrado.sarif
+
+      - name: Enviar o relatório ao Code Scanning
+        if: ${{ !cancelled() && env.PODE_ENVIAR == 'true' && hashFiles('semgrep-filtrado.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: semgrep-filtrado.sarif
+          category: semgrep
+
+  iac:
+    name: Infraestrutura
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # infra/ (Terraform) e as pastas dos Dockerfiles (api/ e app/). O trivy config aceita um
+      # alvo por vez.
+      - name: Varrer Terraform e Dockerfiles (Trivy)
+        run: |
+          for alvo in infra api app; do
+            echo "::group::trivy config ${alvo}"
+            docker run --rm -v "$PWD:/repo" -w /repo "$TRIVY_IMAGEM" config \
+              --severity HIGH,CRITICAL --exit-code 1 --skip-dirs '**/node_modules' "$alvo"
+            echo "::endgroup::"
+          done
+
+      - name: Instalar o Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Conferir formatação (terraform fmt)
+        working-directory: infra
+        run: terraform fmt -check -recursive -diff
+
+      - name: Validar (terraform validate)
+        working-directory: infra
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  testes-api:
+    name: Testes da API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # Postgres com PostGIS para os testes (tests/conftest.py). As credenciais são fictícias
+      # e só existem neste job.
+      postgres:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_USER: passo
+          POSTGRES_PASSWORD: passo-dev
+          POSTGRES_DB: passo_seguro
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U passo -d passo_seguro"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://passo:passo-dev@localhost:5432/passo_seguro_test
+      # No CI, banco fora do ar é falha (e não "teste pulado").
+      EXIGIR_BANCO: "1"
+
+    defaults:
+      run:
+        working-directory: api
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar o Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            api/requirements.txt
+            api/requirements-dev.txt
+
+      - name: Instalar dependências (versões fixas)
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff check)
+        run: ruff check .
+
+      - name: Formatação (ruff format)
+        run: ruff format --check .
+
+      # Inclui o teste de contrato (Schemathesis contra o openapi.yaml da raiz).
+      - name: Testes (pytest)
+        run: pytest -q
+
+  testes-app:
+    name: Testes do app
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Instalar o Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Instalar dependências (npm ci)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos do contrato em dia (check:api)
+        run: npm run check:api
+
+      - name: Testes
+        run: npm test
+
+      - name: Build
+        env:
+          VITE_API_URL: /api
+        run: npm run build
+
+  build:
+    name: Imagem (${{ matrix.servico }})
+    needs: [segredos, sast, iac, testes-api, testes-app]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: [api, app]
+    env:
+      IMAGEM: ghcr.io/passo-seguro/passo-seguro-${{ matrix.servico }}
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Preparar o Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Constrói e carrega a imagem no Docker local, sem enviar nada ainda.
+      - name: Construir a imagem
+        id: construir
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.servico }}
+          load: true
+          push: false
+          provenance: false
+          tags: ${{ env.IMAGEM }}:${{ github.sha }}
+          build-args: ${{ matrix.servico == 'app' && 'VITE_API_URL=/api' || '' }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,scope=${{ matrix.servico }},mode=max
+
+      # Reprova com vulnerabilidade HIGH/CRITICAL que já tenha correção publicada.
+      - name: Varrer a imagem (Trivy)
+        id: trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEM }}:${{ github.sha }}
+          version: ${{ env.TRIVY_VERSAO }}
+          format: sarif
+          output: trivy-${{ matrix.servico }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          limit-severities-for-sarif: true
+          hide-progress: true
+
+      # Só para ler no log o que reprovou (o SARIF não é legível no terminal).
+      - name: Listar as vulnerabilidades
+        if: ${{ failure() && steps.trivy.outcome == 'failure' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEM }}:${{ github.sha }}
+          version: ${{ env.TRIVY_VERSAO }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          hide-progress: true
+          skip-setup-trivy: true
+
+      - name: Enviar o relatório ao Code Scanning
+        if: ${{ !cancelled() && env.PODE_ENVIAR == 'true' && hashFiles(format('trivy-{0}.sarif', matrix.servico)) != '' }}
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: trivy-${{ matrix.servico }}.sarif
+          category: trivy-${{ matrix.servico }}
+
+      - name: Gerar o SBOM (SPDX)
+        if: ${{ !cancelled() && steps.construir.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGEM }}:${{ github.sha }}
+          version: ${{ env.TRIVY_VERSAO }}
+          format: spdx-json
+          output: sbom-${{ matrix.servico }}.spdx.json
+          exit-code: "0"
+          hide-progress: true
+          skip-setup-trivy: true
+
+      - name: Anexar o SBOM
+        if: ${{ !cancelled() && steps.construir.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ matrix.servico }}
+          path: sbom-${{ matrix.servico }}.spdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # A partir daqui só roda se o Trivy passou (os passos anteriores falham o job). Só push
+      # em branch do próprio repositório publica: PR e Dependabot não têm token com escrita.
+      - name: Entrar no GHCR
+        if: ${{ github.event_name == 'push' && github.repository == 'Passo-Seguro/passo-seguro' && env.PODE_ENVIAR == 'true' }}
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Envia a MESMA imagem que o Trivy aprovou (sem reconstruir). ":latest" só na main.
+      - name: Publicar a imagem
+        id: publicar
+        if: ${{ github.event_name == 'push' && github.repository == 'Passo-Seguro/passo-seguro' && env.PODE_ENVIAR == 'true' }}
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag "$IMAGEM:$GITHUB_SHA" "$IMAGEM:latest"
+          fi
+          docker push --all-tags "$IMAGEM"
+          digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGEM:$GITHUB_SHA")"
+          echo "### Imagem publicada (${{ matrix.servico }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Um deploy por vez e nunca cancelado no meio.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_RG: ${{ vars.AZURE_RG }}
+      ACA_API: ${{ vars.ACA_API }}
+      ACA_APP: ${{ vars.ACA_APP }}
+      PUBLIC_URL: ${{ vars.PUBLIC_URL }}
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Sem senha: o login usa a identidade federada (OIDC) do environment "production".
+      - name: Entrar na Azure
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Instalar a extensão containerapp
+        run: az extension add --name containerapp --upgrade --yes
+
+      - name: Atualizar a API
+        run: >-
+          bash .github/scripts/implantar.sh "$ACA_API" "$AZURE_RG"
+          "ghcr.io/passo-seguro/passo-seguro-api:${GITHUB_SHA}" 300
+
+      - name: Atualizar o app
+        run: >-
+          bash .github/scripts/implantar.sh "$ACA_APP" "$AZURE_RG"
+          "ghcr.io/passo-seguro/passo-seguro-app:${GITHUB_SHA}" 300
+
+      # O primeiro acesso depois da escala a zero demora: tenta por até ~3 minutos por URL.
+      - name: Teste de fumaça
+        run: |
+          base="${PUBLIC_URL%/}"
+          for caminho in "/" "/api/saude"; do
+            ok=0
+            for tentativa in $(seq 1 18); do
+              if curl -fsS --max-time 30 -o /dev/null "${base}${caminho}"; then
+                echo "OK ${caminho} (tentativa ${tentativa})"
+                ok=1
+                break
+              fi
+              echo "Falhou ${caminho} (tentativa ${tentativa}); aguardando 10s"
+              sleep 10
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::${caminho} não respondeu 2xx a tempo."
+              exit 1
+            fi
+          done
