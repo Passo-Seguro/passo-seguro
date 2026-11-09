@@ -41,7 +41,14 @@ resource "azurerm_federated_identity_credential" "github" {
   parent_id = azurerm_user_assigned_identity.github.id
   issuer    = "https://token.actions.githubusercontent.com"
   audience  = ["api://AzureADTokenExchange"]
-  subject   = "repo:Passo-Seguro/passo-seguro:environment:production"
+  # O repositório usa o subject OIDC IMUTÁVEL (use_immutable_subject = true): o GitHub troca os
+  # nomes por IDs, e o token de verdade chega como o valor abaixo, não como
+  # "repo:Passo-Seguro/passo-seguro:...". Com o nome o login falha (AADSTS700213). Os IDs são
+  # os da organização (352685166) e do repositório (1446389696); o ID do repositório só muda se
+  # ele for apagado e recriado, e um rename não o altera. Conferir com:
+  #   gh api repos/Passo-Seguro/passo-seguro/actions/oidc/customization/sub
+  # (campo sub_claim_prefix).
+  subject = "repo:Passo-Seguro@352685166/passo-seguro@1446389696:environment:production"
 }
 
 # Menor privilégio: o papel é concedido SÓ no escopo de cada um dos dois Container Apps, e
