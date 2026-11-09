@@ -237,3 +237,8 @@ override.tf
 override.tf.json
 *_override.tf
 infra/backend.hcl
+
+# Segredos locais da observabilidade (token de métricas do Prometheus) e plano do Terraform
+observabilidade/metrics-token
+observabilidade/*.token
+infra/tf.plan
