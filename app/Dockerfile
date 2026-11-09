@@ -33,7 +33,7 @@ RUN case "$VITE_API_URL" in \
 RUN npm run build
 
 # ---------- Etapa 2: servidor ----------
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS servidor
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS servidor
 
 # Só estas duas variáveis passam pelo envsubst; as $variáveis do nginx ficam intactas.
 ENV NGINX_ENVSUBST_FILTER='^(API_UPSTREAM|METRICS_TOKEN)$'
