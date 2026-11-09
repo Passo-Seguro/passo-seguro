@@ -37,6 +37,11 @@ resource "azurerm_subnet" "db" {
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = [local.cidr_db]
 
+  # A plataforma do Postgres Flexible (delegada a esta subnet) usa o endpoint de serviço
+  # Microsoft.Storage (por exemplo, para backups). O Azure o mantém nesta subnet; declarar aqui
+  # evita que o Terraform tente removê-lo a cada plan.
+  service_endpoints = ["Microsoft.Storage"]
+
   delegation {
     name = "postgres-flexible"
 
