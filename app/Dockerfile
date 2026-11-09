@@ -23,6 +23,13 @@ COPY . .
 # Caminho relativo: o navegador chama /api no mesmo domínio em que abriu o app.
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=${VITE_API_URL}
+# Só aceita um caminho começando em "/" ou um endereço http(s). No Git Bash do Windows o MSYS
+# converte "/api" em "C:/Program Files/Git/api" antes de o Docker receber o argumento, e a imagem
+# sairia "boa" com a API chamada num endereço inexistente. Solução: export MSYS_NO_PATHCONV=1.
+RUN case "$VITE_API_URL" in \
+      /*|http://*|https://*) ;; \
+      *) echo "ERRO: VITE_API_URL='$VITE_API_URL' é inválido: use um caminho como /api ou um endereço http(s)://. No Git Bash do Windows rode antes: export MSYS_NO_PATHCONV=1" >&2; exit 1 ;; \
+    esac
 RUN npm run build
 
 # ---------- Etapa 2: servidor ----------
