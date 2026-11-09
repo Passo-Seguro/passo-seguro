@@ -78,6 +78,7 @@ Depois copie `backend.hcl.example` para `backend.hcl` (o git ignora) e ajuste os
 Os Container Apps precisam de uma imagem para existir. Antes do primeiro `apply`, publique uma imagem `:bootstrap` de cada serviço no GHCR (o pipeline troca a tag a cada deploy):
 
 ```bash
+export MSYS_NO_PATHCONV=1   # Git Bash (Windows): sem isto "/api" vira "C:/Program Files/Git/api" no build
 echo "$GHCR_TOKEN" | docker login ghcr.io -u <SEU_USUARIO_GITHUB> --password-stdin   # PAT com write:packages
 
 docker build -t ghcr.io/passo-seguro/passo-seguro-api:bootstrap api/
