@@ -3,9 +3,13 @@
 # outputs. Os Container Apps leem os segredos por referência, com a identidade
 # id-passoseguro-apps (ver identidade.tf).
 
+# Riscos aceitos do Key Vault (tabela "Riscos aceitos" no README). O Trivy lê os #trivy:ignore
+# logo acima do recurso; o Semgrep lê o nosemgrep no fim da linha do "resource".
+# Semgrep keyvault-purge-enabled: purge protection desligada de propósito para o destroy funcionar na assinatura de estudante.
+# Semgrep keyvault-specify-network-acl: acesso público aberto de propósito no MVP; a evolução de produção é network_acls com default_action = "Deny" + service endpoint na snet-aca.
 #trivy:ignore:AVD-AZU-0013 Acesso público aberto de propósito no MVP (private endpoint só em produção real); o acesso exige Entra ID + RBAC.
 #trivy:ignore:AVD-AZU-0016 Purge protection desligada de propósito para o destroy funcionar na assinatura de estudante.
-resource "azurerm_key_vault" "main" {
+resource "azurerm_key_vault" "main" { # nosemgrep: terraform.azure.security.keyvault.keyvault-purge-enabled.keyvault-purge-enabled, terraform.azure.security.keyvault.keyvault-specify-network-acl.keyvault-specify-network-acl
   name                = "kv-passoseguro-${local.sufixo}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -44,11 +48,15 @@ resource "time_sleep" "rbac_executor" {
 }
 
 # ---------- Segredos gerados ----------
-# Sem expiration_date de propósito (o Trivy sugere, severidade LOW, AVD-AZU-0017): segredo
-# vencido não pode ser lido e derrubaria a API. A rotação é manual: terraform apply
-# -replace='random_password.gerado["service-token"]' e o app pega a versão nova.
+# Validade FIXA dos segredos (nunca timeadd/timestamp: com data móvel todo plan mostraria
+# mudança). A data cobre a entrega da GS e a correção; depois dela o segredo vence e o
+# Container App deixa de lê-lo (a API cai). Por isso a data FORÇA uma revisão: antes de
+# 2027-06-30, renove-a (aqui) ou rotacione o segredo e rode o apply.
+# A rotação é manual: terraform apply -replace='random_password.gerado["service-token"]' e o
+# app pega a versão nova.
 locals {
-  segredos_gerados = toset(["service-token", "device-token", "metrics-token", "salt-autor"])
+  validade_segredos = "2027-06-30T00:00:00Z"
+  segredos_gerados  = toset(["service-token", "device-token", "metrics-token", "salt-autor"])
 }
 
 resource "random_password" "gerado" {
@@ -61,43 +69,47 @@ resource "random_password" "gerado" {
 resource "azurerm_key_vault_secret" "gerado" {
   for_each = local.segredos_gerados
 
-  name         = each.key
-  value        = random_password.gerado[each.key].result
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-  tags         = local.tags
+  name            = each.key
+  value           = random_password.gerado[each.key].result
+  key_vault_id    = azurerm_key_vault.main.id
+  content_type    = "text/plain"
+  expiration_date = local.validade_segredos
+  tags            = local.tags
 
   depends_on = [time_sleep.rbac_executor]
 }
 
 resource "azurerm_key_vault_secret" "db_password" {
-  name         = "db-password"
-  value        = random_password.db.result
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-  tags         = local.tags
+  name            = "db-password"
+  value           = random_password.db.result
+  key_vault_id    = azurerm_key_vault.main.id
+  content_type    = "text/plain"
+  expiration_date = local.validade_segredos
+  tags            = local.tags
 
   depends_on = [time_sleep.rbac_executor]
 }
 
 # URL de conexão da API (SQLAlchemy + psycopg). O endereço é o nome privado do servidor.
 resource "azurerm_key_vault_secret" "database_url" {
-  name         = "database-url"
-  value        = "postgresql+psycopg://${azurerm_postgresql_flexible_server.main.administrator_login}:${random_password.db.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/${azurerm_postgresql_flexible_server_database.passo_seguro.name}?sslmode=require"
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-  tags         = local.tags
+  name            = "database-url"
+  value           = "postgresql+psycopg://${azurerm_postgresql_flexible_server.main.administrator_login}:${random_password.db.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/${azurerm_postgresql_flexible_server_database.passo_seguro.name}?sslmode=require"
+  key_vault_id    = azurerm_key_vault.main.id
+  content_type    = "text/plain"
+  expiration_date = local.validade_segredos
+  tags            = local.tags
 
   depends_on = [time_sleep.rbac_executor]
 }
 
 # Token do serviço do assistente (LLM no Railway). O valor vem de var.assistente_token.
 resource "azurerm_key_vault_secret" "assistente_token" {
-  name         = "assistente-token"
-  value        = var.assistente_token
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-  tags         = local.tags
+  name            = "assistente-token"
+  value           = var.assistente_token
+  key_vault_id    = azurerm_key_vault.main.id
+  content_type    = "text/plain"
+  expiration_date = local.validade_segredos
+  tags            = local.tags
 
   depends_on = [time_sleep.rbac_executor]
 }
