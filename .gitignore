@@ -231,6 +231,9 @@ api/dados/
 # Terraform (o .terraform.lock.hcl FICA versionado)
 .terraform/
 *.tfplan
+# Plano do Terraform carrega segredos em texto puro: nunca versionar, com qualquer extensão.
+*.plan
+infra/*.plan
 crash.log
 crash.*.log
 override.tf
