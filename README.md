@@ -1,5 +1,7 @@
 # Passo Seguro
 
+[![CI](https://github.com/Passo-Seguro/passo-seguro/actions/workflows/ci.yml/badge.svg)](https://github.com/Passo-Seguro/passo-seguro/actions/workflows/ci.yml)
+
 > Plataforma de zeladoria colaborativa para calçadas de São Paulo: o pedestre fotografa um problema, a IA identifica o que é, o assistente explica quem resolve e uma automação encaminha o caso para a subprefeitura certa.
 
 **MVP no ar:** A definir
@@ -243,6 +245,66 @@ As dependências têm versões fixas em `api/requirements.txt` e `api/requiremen
 **Relatos simulados** para o mapa não começar vazio: [`docs/dados-simulados.md`](./docs/dados-simulados.md).
 
 **Relatos criados sob visão fake:** a coluna interna `relatos.modo_deteccao` (`real`, `fake` ou `nenhuma`) separa o que veio do modelo do que veio do detector de mentira; consulta e limpeza em [`docs/modo-deteccao.md`](./docs/modo-deteccao.md).
+
+## Pipeline
+
+O workflow [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) roda a cada push em qualquer branch, em PR para `main` e sob demanda (`workflow_dispatch`). Um push novo na mesma branch cancela a execução anterior; na `main` nunca cancela, para não interromper um deploy.
+
+```
+segredos ─┐
+sast      │
+iac       ├─► build [api, app] ─► deploy   (só push na main)
+testes-api│
+testes-app┘
+```
+
+| Job | O que faz | Reprova quando |
+|---|---|---|
+| `segredos` | Gitleaks (CLI em container) no **histórico inteiro**, com [`.gitleaks.toml`](./.gitleaks.toml) | acha segredo que não está na lista de tokens fictícios |
+| `sast` | Semgrep (`p/default`, `p/python`, `p/typescript`, `p/dockerfile`, `p/terraform`), sem conta no Semgrep Cloud | qualquer achado |
+| `iac` | `trivy config` em `infra/`, `api/` e `app/`; `terraform fmt -check`; `terraform validate` | achado HIGH/CRITICAL ou Terraform fora do padrão/inválido |
+| `testes-api` | `ruff check`, `ruff format --check` e `pytest` com Postgres+PostGIS | lint, formatação ou teste falha (banco fora do ar também é falha) |
+| `testes-app` | `npm ci`, lint, `check:api` (tipos do contrato em dia), testes e build | qualquer etapa falha |
+| `build` | Constrói `api` e `app`, varre a imagem com o Trivy e, **só se passar**, publica no GHCR; gera o SBOM (SPDX) como artifact | vulnerabilidade HIGH/CRITICAL **com correção disponível** |
+| `deploy` | Atualiza a API e depois o app no Azure Container Apps, espera a revisão nova ficar saudável e faz o teste de fumaça | a revisão mais recente não usa a imagem do commit, não fica saudável em 5 min, ou `/` e `/api/saude` não respondem |
+
+Os resultados do Gitleaks, do Semgrep e do Trivy vão para a aba **Security → Code scanning**.
+
+**Imagens.** `ghcr.io/passo-seguro/passo-seguro-api` e `...-app`, com as tags `:<sha do commit>` e, na `main`, `:latest`. O que sobe é exatamente a imagem que o Trivy aprovou. As labels OCI `source` e `revision` apontam para este repositório e o commit. O SBOM de cada imagem fica nos artifacts da execução (`sbom-api`, `sbom-app`).
+
+**Deploy.** Só em push na `main`, no environment `production`. O login na Azure é por OIDC (identidade gerenciada, sem senha). Secrets do environment: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. Variables: `AZURE_RG`, `ACA_API`, `ACA_APP`, `PUBLIC_URL`. A espera pela revisão está em [`.github/scripts/implantar.sh`](./.github/scripts/implantar.sh). PR de fork e Dependabot rodam as varreduras e os testes, mas não enviam relatório nem imagem (o token deles é somente leitura).
+
+### Reproduzir as varreduras localmente
+
+Só precisa de Docker. Rode na raiz do repositório (no Windows, use Git Bash ou WSL; no Git Bash prefixe com `MSYS_NO_PATHCONV=1`). Usam as mesmas versões do CI (variáveis `env` no topo do `ci.yml`).
+
+```bash
+# Segredos no histórico (precisa do clone completo: git fetch --unshallow, se for raso)
+docker run --rm -v "$PWD:/repo" -w /repo zricethezav/gitleaks:v8.30.1 \
+  git --config .gitleaks.toml --redact .
+
+# SAST
+docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.184.0 \
+  semgrep scan --config p/default --config p/python --config p/typescript \
+  --config p/dockerfile --config p/terraform --metrics=off --error
+
+# Terraform e Dockerfiles (rode uma vez para cada alvo: infra, api e app)
+docker run --rm -v "$PWD:/repo" -w /repo aquasec/trivy:0.76.2 config \
+  --severity HIGH,CRITICAL --exit-code 1 --skip-dirs '**/node_modules' infra
+
+# Formatação e validação do Terraform
+docker run --rm -v "$PWD/infra:/infra" -w /infra hashicorp/terraform:1.17.1 fmt -check -recursive -diff
+docker run --rm -v "$PWD/infra:/infra" -w /infra --entrypoint sh hashicorp/terraform:1.17.1 \
+  -c "terraform init -backend=false -input=false && terraform validate"
+
+# Imagem: construir e varrer como o job "build" (troque api por app para o outro serviço)
+docker build -t passo-seguro-api:local api/
+# app: docker build --build-arg VITE_API_URL=/api -t passo-seguro-app:local app/
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.2 image \
+  --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 passo-seguro-api:local
+```
+
+Os testes e o estilo estão em [Desenvolvimento local da API](#api-fastapi--postgrespostgis) e em [`app/README.md`](./app/README.md).
 
 ## Licença
 
