@@ -196,6 +196,26 @@ docker compose down        # acrescente -v para apagar os dados do Prometheus e 
 Os dois alertas do Grafana que dependem de a API estar viva (5xx e latência) não são acionados por
 nenhuma queda: as respostas de erro vêm do nginx.
 
+## 6. O que foi observado na validação em produção (10/11/2026)
+
+- **Método 1 (`ingress disable`):** `curl -i /api/painel` devolveu **404** (página HTML do ingress do Azure,
+  repassada pelo nginx) e `/metrics/api` também deu 404. Ou seja, **não** gera 5xx: o alerta do Azure Monitor
+  não dispara por esse caminho. O `up` vai a 0 do mesmo jeito.
+- **Método 2 (`API_UPSTREAM=http://ca-passoseguro-api:81`):** depois que a revisão nova ativou (cerca de 1,5 min),
+  `/api` e `/metrics/api` passaram a devolver **504** (estouro do tempo de conexão do nginx).
+  - "API fora do ar" passou a *Firing* no Grafana e a mensagem chegou ao Discord.
+  - O alerta `alerta-5xx-ca-passoseguro-app` disparou no Azure Monitor (103 respostas 5xx, limite 5). O e-mail
+    pode cair em spam; o alerta também aparece em *Monitor > Alerts* no portal.
+- **Restauração:** com o `API_UPSTREAM` original, a raspagem voltou a 200 em cerca de 2 min e o alerta do Grafana
+  voltou a *Normal* em menos de 1 min. `terraform plan` depois da restauração: **No changes**.
+- **"Latência p95 alta" pode ficar em *Pending* por alguns minutos depois de restaurar:** as requisições que
+  ficaram presas durante a queda terminam depois e entram na janela de 2 min do p95. Passa sozinho sem disparar
+  (o `for` é de 5 min). Espere voltar a *Normal* antes do print dos alertas resolvidos.
+- **Quedas curtas de `up` (menos de 1 min)** apareceram algumas vezes na linha do tempo mesmo sem intervenção
+  (provável partida a frio ou troca de réplica); o `for: 1m` evita que virem alerta.
+- Se o notebook estiver com pouca memória, o gerador de tráfego (bash) pode morrer com `Win32 error 1455`. Feche
+  outros programas ou religue-o.
+
 ## Segurança
 
 - Portas só em `127.0.0.1`. O `.env` e o `metrics-token` ficam fora do git (`.gitignore`).
