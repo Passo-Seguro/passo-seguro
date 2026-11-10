@@ -964,6 +964,36 @@ input[type='text'] {
   font-size: 2rem;
 }
 
+.painel-indicadores {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.painel-indicador {
+  display: grid;
+  gap: 2px;
+}
+
+.painel-indicador dt {
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.painel-indicador dd {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+.painel-fonte {
+  margin: 20px 0 0;
+  padding-top: 12px;
+  border-top: 2px dotted var(--borda-suave);
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
 .painel-total {
   margin: 10px 0;
 }
