@@ -1,0 +1,29 @@
+# Pontos de contato. A URL do webhook do Discord vem da variável de ambiente DISCORD_WEBHOOK_URL
+# (observabilidade/.env, nunca versionado); o Grafana a interpola na partida.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: discord-passo-seguro
+    receivers:
+      - uid: discord-passo-seguro
+        type: discord
+        settings:
+          url: ${DISCORD_WEBHOOK_URL}
+          title: '{{ template "passo_seguro.titulo" . }}'
+          message: '{{ template "passo_seguro.mensagem" . }}'
+        disableResolveMessage: false # mostra também o "resolvido"
+
+  # Alternativa por e-mail. Para usar: descomente este bloco, a variável GF_SMTP_* e ALERTA_EMAIL
+  # no docker-compose.yml, e troque "receiver" em politicas.yml para "email-passo-seguro".
+  # - orgId: 1
+  #   name: email-passo-seguro
+  #   receivers:
+  #     - uid: email-passo-seguro
+  #       type: email
+  #       settings:
+  #         addresses: ${ALERTA_EMAIL}
+  #         singleEmail: true
+  #         subject: '{{ template "passo_seguro.titulo" . }}'
+  #         message: '{{ template "passo_seguro.mensagem" . }}'
+  #       disableResolveMessage: false

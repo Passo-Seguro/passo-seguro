@@ -1,0 +1,24 @@
+# Mensagem dos alertas em português: situação, valor atual (anotações "description" e "resolvido") e link do
+# painel (.PanelURL usa GF_SERVER_ROOT_URL). Sem "$" aqui de propósito: o Grafana expandiria.
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: passo-seguro
+    template: |
+      {{ define "passo_seguro.titulo" -}}
+      {{ if gt (len .Alerts.Firing) 0 }}🔴 Passo Seguro: {{ .CommonLabels.alertname }}{{ else }}🟢 Passo Seguro: {{ .CommonLabels.alertname }} (resolvido){{ end }}
+      {{- end }}
+
+      {{ define "passo_seguro.mensagem" -}}
+      {{ range .Alerts.Firing -}}
+      **🔴 DISPAROU: {{ .Labels.alertname }}**
+      {{ .Annotations.description }}
+      Painel: {{ .PanelURL }}
+      {{ end }}
+      {{- range .Alerts.Resolved -}}
+      **🟢 RESOLVIDO: {{ .Labels.alertname }}**
+      {{ .Annotations.resolvido }}
+      Painel: {{ .PanelURL }}
+      {{ end }}
+      {{- end }}
