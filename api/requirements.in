@@ -13,3 +13,5 @@ httpx
 pillow
 tzdata
 prometheus-client
+azure-identity
+azure-storage-blob

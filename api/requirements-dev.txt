@@ -16,7 +16,9 @@ certifi==2026.10.23
     #   httpx
     #   requests
 charset-normalizer==3.5.2
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   requests
 click==8.5.0
     # via
     #   -c requirements.txt
@@ -84,7 +86,9 @@ pyyaml==6.0.3
     #   -r requirements-dev.in
     #   schemathesis
 requests==2.34.2
-    # via schemathesis
+    # via
+    #   -c requirements.txt
+    #   schemathesis
 respx==0.23.1
     # via -r requirements-dev.in
 rich==15.0.0
@@ -101,6 +105,8 @@ typing-extensions==4.16.0
     #   anyio
     #   schemathesis
 urllib3==2.8.0
-    # via requests
+    # via
+    #   -c requirements.txt
+    #   requests
 werkzeug==3.1.9
     # via schemathesis

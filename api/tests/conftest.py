@@ -172,7 +172,7 @@ def settings(tmp_path: Path) -> Settings:
         public_base_url="http://testserver",
         use_fake_visao=True,
         use_fake_assistente=True,
-        painel_export_path=API_DIR.parent / "docs" / "exemplos" / "vw_prioridades.json",
+        painel_json_path=API_DIR.parent / "docs" / "exemplos" / "vw_prioridades.json",
     )
 
 

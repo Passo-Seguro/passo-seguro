@@ -199,7 +199,7 @@ def test_cliente_http_do_assistente_respeita_o_timeout_configurado():
 
 
 def _painel(montar_cliente, settings, caminho):
-    return montar_cliente(settings.model_copy(update={"painel_export_path": caminho})).get("/painel")
+    return montar_cliente(settings.model_copy(update={"painel_json_path": caminho})).get("/painel")
 
 
 def test_painel_le_o_arquivo_e_ordena_da_maior_para_a_menor_prioridade(montar_cliente, settings):
@@ -264,7 +264,7 @@ def test_painel_lista_vazia_e_valida(montar_cliente, settings, tmp_path):
 
 def test_painel_acompanha_a_troca_do_arquivo(montar_cliente, settings, tmp_path):
     arquivo = tmp_path / "painel.json"
-    cliente = montar_cliente(settings.model_copy(update={"painel_export_path": arquivo}))
+    cliente = montar_cliente(settings.model_copy(update={"painel_json_path": arquivo}))
     assert cliente.get("/painel").status_code == 404
     arquivo.write_text(EXEMPLO_PAINEL.read_text(encoding="utf-8"), encoding="utf-8")
     assert len(cliente.get("/painel").json()) == 2

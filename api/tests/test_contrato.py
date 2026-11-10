@@ -80,7 +80,7 @@ def servidor(tmp_path_factory, engine_banco):
         public_base_url="http://127.0.0.1",
         use_fake_visao=True,
         use_fake_assistente=True,
-        painel_export_path=RAIZ / "docs" / "exemplos" / "vw_prioridades.json",
+        painel_json_path=RAIZ / "docs" / "exemplos" / "vw_prioridades.json",
         habilitar_rc2=rc2,
     )
     from app.config import get_settings

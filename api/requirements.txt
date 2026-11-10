@@ -14,12 +14,31 @@ anyio==4.16.0
     # via
     #   httpx
     #   starlette
+azure-core==1.41.0
+    # via
+    #   azure-identity
+    #   azure-storage-blob
+azure-identity==1.27.0
+    # via -r requirements.in
+azure-storage-blob==12.31.1
+    # via -r requirements.in
 certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
+    #   requests
+cffi==2.1.1
+    # via cryptography
+charset-normalizer==3.5.2
+    # via requests
 click==8.5.0
     # via uvicorn
+cryptography==50.0.2
+    # via
+    #   azure-identity
+    #   azure-storage-blob
+    #   msal
+    #   pyjwt
 fastapi==0.162.0
     # via -r requirements.in
 geoalchemy2==0.21.0
@@ -36,10 +55,19 @@ idna==3.20
     # via
     #   anyio
     #   httpx
+    #   requests
+isodate==0.7.2
+    # via azure-storage-blob
 mako==1.4.3
     # via alembic
 markupsafe==3.0.4
     # via mako
+msal==1.39.0
+    # via
+    #   azure-identity
+    #   msal-extensions
+msal-extensions==1.3.1
+    # via azure-identity
 opentelemetry-api==1.45.2
     # via fastapi
 packaging==26.3
@@ -52,6 +80,8 @@ psycopg==3.3.8
     # via -r requirements.in
 psycopg-binary==3.3.8
     # via psycopg
+pycparser==3.12
+    # via cffi
 pydantic==2.14.2
     # via
     #   fastapi
@@ -60,10 +90,18 @@ pydantic-core==2.50.2
     # via pydantic
 pydantic-settings==2.16.2
     # via -r requirements.in
+pyjwt==2.15.1
+    # via
+    #   msal
+    #   pyjwt
 python-dotenv==1.2.4
     # via pydantic-settings
 python-multipart==0.0.33
     # via -r requirements.in
+requests==2.34.2
+    # via
+    #   azure-core
+    #   msal
 sqlalchemy==2.1.8
     # via
     #   -r requirements.in
@@ -75,6 +113,9 @@ typing-extensions==4.16.0
     # via
     #   alembic
     #   anyio
+    #   azure-core
+    #   azure-identity
+    #   azure-storage-blob
     #   fastapi
     #   opentelemetry-api
     #   psycopg
@@ -93,5 +134,7 @@ tzdata==2026.6
     # via
     #   -r requirements.in
     #   psycopg
+urllib3==2.8.0
+    # via requests
 uvicorn==0.54.0
     # via -r requirements.in
