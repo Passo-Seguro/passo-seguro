@@ -245,3 +245,5 @@ infra/backend.hcl
 observabilidade/metrics-token
 observabilidade/*.token
 infra/tf.plan
+# Alvo do Prometheus gerado por observabilidade/preparar.sh a partir de PUBLIC_URL
+observabilidade/prometheus/alvos/api.json

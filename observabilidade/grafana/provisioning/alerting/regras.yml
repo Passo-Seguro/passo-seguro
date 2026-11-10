@@ -1,0 +1,162 @@
+# Regras de alerta do Grafana, avaliadas a cada 1 minuto. Os limiares são os mesmos das linhas
+# tracejadas do painel "Passo Seguro · Sinais de ouro".
+#
+# O Grafana expande $VAR (variável de ambiente) nos arquivos de provisionamento; "$values" não é
+# uma variável definida, então passa intacto para o modelo da anotação. (Testado no Grafana 13.2.5:
+# o escape "$$" NÃO é desfeito em regras de alerta e quebraria o modelo.)
+#
+# "Sem dados" (sem tráfego, ou Prometheus ainda sem séries) conta como OK: o Prometheus local só
+# fica ligado quando se gera evidência e a API escala a zero.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Passo Seguro - API
+    folder: Passo Seguro
+    interval: 1m
+    rules:
+      # up{job="api"} == 0 por 1 minuto. Quando a API cai, a raspagem de /metrics/api falha
+      # (o nginx do app não consegue falar com ela) e o Prometheus registra up = 0.
+      - uid: api-fora-do-ar
+        title: API fora do ar
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: up{job="api"}
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              datasource: { type: __expr__, uid: __expr__ }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] } # up == 0
+              datasource: { type: __expr__, uid: __expr__ }
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        isPaused: false
+        labels:
+          severidade: critica
+        annotations:
+          summary: A API não responde à raspagem de métricas.
+          description: >-
+            A raspagem de /metrics/api falhou (up = {{ printf "%.0f" $values.B.Value }}) há mais de 1 minuto.
+            O app (nginx) não está conseguindo falar com a API.
+          __dashboardUid__: passo-seguro-sinais
+          resolvido: >-
+            A raspagem de /metrics/api voltou a funcionar (up = {{ printf "%.0f" $values.B.Value }}).
+          __panelId__: "2"
+
+      # Respostas 5xx ÷ total, janela de 2 min. A regra de gravação já evita 0/0: sem tráfego a
+      # série some e o alerta fica OK.
+      - uid: taxa-5xx-alta
+        title: Taxa de 5xx alta
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: passo_seguro:http_taxa_5xx:rate2m
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              datasource: { type: __expr__, uid: __expr__ }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0.05] } # 5%
+              datasource: { type: __expr__, uid: __expr__ }
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        isPaused: false
+        labels:
+          severidade: alta
+        annotations:
+          summary: Mais de 5% das respostas da API são erros 5xx.
+          description: >-
+            {{ humanizePercentage $values.B.Value }} das respostas da API são erros 5xx (janela de
+            2 minutos; limite: 5%), há pelo menos 2 minutos.
+          __dashboardUid__: passo-seguro-sinais
+          resolvido: >-
+            A taxa de respostas 5xx voltou a {{ humanizePercentage $values.B.Value }} (limite: 5%).
+          __panelId__: "31"
+
+      # p95 acima de 3 s por 5 min.
+      - uid: latencia-p95-alta
+        title: Latência p95 alta
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              expr: passo_seguro:http_latencia_p95_segundos:rate2m
+              instant: true
+              range: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              datasource: { type: __expr__, uid: __expr__ }
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [3] } # 3 s
+              datasource: { type: __expr__, uid: __expr__ }
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        labels:
+          severidade: media
+        annotations:
+          summary: O p95 da latência da API passou de 3 segundos.
+          description: >-
+            O p95 da latência da API está em {{ printf "%.2f" $values.B.Value }} s (limite: 3 s) há pelo
+            menos 5 minutos.
+          __dashboardUid__: passo-seguro-sinais
+          resolvido: >-
+            O p95 da latência voltou a {{ printf "%.2f" $values.B.Value }} s (limite: 3 s).
+          __panelId__: "11"
