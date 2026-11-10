@@ -177,7 +177,25 @@ O Terraform ignora mudanças na imagem dos contêineres (`ignore_changes`), ent�
 
 Enquanto o arquivo não existir, `GET /painel` responde 404 (`painel_indisponivel`), o que é o comportamento esperado do primeiro deploy. Arquivo fora do schema do contrato (até 5 MB) ou falha na leitura: 503 (`painel_invalido`), com o motivo no log. O formato é uma lista de `PrioridadeSubprefeitura`; use [`docs/exemplos/vw_prioridades.json`](../docs/exemplos/vw_prioridades.json) como modelo.
 
-Quem **grava** é o pipeline de dados, com uma identidade dele; este Terraform não concede escrita. Para um teste manual, quem tem o papel *Storage Blob Data Contributor* (o dono da assinatura não o tem por padrão) envia sem usar a chave da conta:
+Quem **grava** é o pipeline de dados, com uma identidade dele. O Terraform concede escrita (*Storage Blob Data Contributor*, **só no container `painel`**) a cada object ID da variável `painel_publicadores_object_ids` (lista, vazia por padrão). Os IDs reais **não entram no git**: ponha no `infra/terraform.tfvars` (o git ignora `*.tfvars`) ou em `TF_VAR_painel_publicadores_object_ids`, e o pipeline que roda o `apply` precisa receber o mesmo valor por um segredo do ambiente.
+
+Como obter o object ID:
+
+```bash
+# Você (para o teste manual abaixo)
+az ad signed-in-user show --query id -o tsv
+
+# O pipeline de dados: o object ID do PRINCIPAL, não o client ID do app
+az ad sp show --id <client id do service principal> --query id -o tsv
+az identity show -g <resource group> -n <nome da identidade> --query principalId -o tsv   # identidade gerenciada
+```
+
+```hcl
+# terraform.tfvars (não versionado)
+painel_publicadores_object_ids = ["<object id da pessoa>", "<object id do pipeline de dados>"]
+```
+
+Quem não está na lista (nem o dono da assinatura, que não tem papel de dados por padrão) não consegue gravar. Depois do `apply`, o papel leva alguns minutos para propagar. Para um teste manual, quem está na lista envia sem usar a chave da conta:
 
 ```bash
 cd infra
@@ -210,7 +228,7 @@ O nome do blob precisa ser exatamente `painel.json`. O pipeline deve **sobrescre
 Não são da infraestrutura, mas o que está descrito aqui depende delas:
 
 1. ~~**App (`app/`)**: nginx como *template* com proxy de `/api` e `VITE_API_URL=/api`.~~ Resolvido no PR #12: o nginx repassa `/api/` para `API_UPSTREAM`, bloqueia `/api/metrics` e serve `/metrics/api` com `METRICS_TOKEN`.
-2. ~~**API (`api/`)**: variáveis e migrações da `feat/api-integracao`, `METRICS_TOKEN` e `PAINEL_EXPORT_PATH`.~~ Resolvido: a branch já está na `main`, e a API agora recebe `METRICS_TOKEN` (mesmo segredo do app), `HABILITAR_RC2`, `PAINEL_BLOB_URL` e `AZURE_CLIENT_ID` (container `painel`; o share `painel` e `PAINEL_EXPORT_PATH` são legado). Falta só **o pipeline de dados gravar o primeiro `painel.json` no container** (seção 5); até lá `GET /painel` dá 404.
+2. ~~**API (`api/`)**: variáveis e migrações da `feat/api-integracao`, `METRICS_TOKEN` e `PAINEL_EXPORT_PATH`.~~ Resolvido: a branch já está na `main`, e a API agora recebe `METRICS_TOKEN` (mesmo segredo do app), `HABILITAR_RC2`, `PAINEL_BLOB_URL` e `AZURE_CLIENT_ID` (container `painel`; o share `painel` e `PAINEL_EXPORT_PATH` são legado). Falta só **o pipeline de dados gravar o primeiro `painel.json` no container** (seção 5; a escrita é concedida por `painel_publicadores_object_ids`); até lá `GET /painel` dá 404.
 3. ~~**Workflow de deploy** (`.github/workflows/`)~~ Resolvido: o job `deploy` do [`ci.yml`](../.github/workflows/ci.yml) usa `id-passoseguro-github` (OIDC) e roda só em push na `main`.
 4. **Assistente**: `ASSISTENTE_URL` e `ASSISTENTE_TOKEN` já são entregues, mas o serviço do assistente não está em nenhum lugar da nuvem; sem ele `POST /assistente` responde a recusa padrão com o link do SP156. O mesmo vale para a visão (`VISAO_URL`/`VISAO_TOKEN` não são entregues ainda: sem eles o relato nasce sem categoria).
 

@@ -20,3 +20,10 @@ assistente_token = "token-ficticio-troque-pelo-do-railway"
 
 alert_email   = "equipe@exemplo.invalid"
 budget_amount = 10
+
+# Quem pode GRAVAR o painel.json (Storage Blob Data Contributor, só no container "painel").
+# Object IDs do Entra ID; a lista vazia não concede nada. O valor real fica no seu
+# terraform.tfvars (não versionado) ou em TF_VAR_painel_publicadores_object_ids. Ver README, seção 5.
+painel_publicadores_object_ids = [
+  # "00000000-0000-0000-0000-000000000000", # exemplo fictício
+]

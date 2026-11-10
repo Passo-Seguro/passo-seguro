@@ -61,3 +61,14 @@ variable "budget_start_date" {
     error_message = "budget_start_date deve ser o dia 1 de um mês, às 00:00:00 UTC (ex.: 2026-11-01T00:00:00Z)."
   }
 }
+
+variable "painel_publicadores_object_ids" {
+  description = "Object IDs (Entra ID) de quem pode GRAVAR o painel.json: cada um recebe Storage Blob Data Contributor só no container painel. Pessoa: az ad signed-in-user show --query id -o tsv. Pipeline de dados (service principal ou identidade gerenciada): o object ID do principal, não o client ID. O valor real vai no terraform.tfvars (o git ignora) ou em TF_VAR_painel_publicadores_object_ids, nunca versionado."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for id in var.painel_publicadores_object_ids : can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", id))])
+    error_message = "Cada item de painel_publicadores_object_ids deve ser um object ID (GUID), ex.: 00000000-0000-0000-0000-000000000000."
+  }
+}
