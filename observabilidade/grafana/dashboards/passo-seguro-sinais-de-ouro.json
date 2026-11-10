@@ -959,7 +959,7 @@
           "id": "joinByField",
           "options": {
             "byField": "rota",
-            "mode": "outer"
+            "mode": "inner"
           }
         },
         {
@@ -969,7 +969,11 @@
               "Time": true,
               "Time 1": true,
               "Time 2": true,
-              "Time 3": true
+              "Time 3": true,
+              "__name__": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true
             },
             "renameByName": {
               "rota": "Rota",
