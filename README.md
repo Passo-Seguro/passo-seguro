@@ -80,13 +80,44 @@ O contrato completo está em [`openapi.yaml`](./openapi.yaml).
 | `POST /relatos` | App e robô | Foto, localização e descrição; devolve id e classe detectada |
 | `POST /deteccoes` | API e triagem | Imagem → lista de `{classe, confiança, caixa}` |
 | `POST /assistente` | App | Pergunta → JSON com resposta, fontes e recusa |
-| `GET /painel` | App | Prioridades por subprefeitura, lidas da Ouro exportada |
+| `GET /painel` | App | Prioridades por subprefeitura (índice, atropelamentos de pedestres e reclamações de calçada), lidas do `painel.json` exportado da camada Ouro |
 | `GET /relatos?status=novo` | Triagem e Airflow | Relatos para triagem e para a coleta diária |
 | `GET /relatos/proximos` | App | Relatos num raio, para o mapa público (localização arredondada a ~100 m) *(rc2)* |
 | `GET /meus-relatos` | App | Relatos do próprio cidadão, pelo id anônimo do aparelho *(rc2)* |
 | `PATCH /relatos/{id}` | App e triagem | App corrige a categoria; triagem atualiza status, subprefeitura, prioridade e confirmações *(rc2)* |
 
 Os contratos marcados com *(rc2)* são a emenda **1.0.0-rc2**, em revisão: só valem depois da aprovação do grupo.
+
+#### `GET /painel` e o `painel.json`
+
+O corpo de `GET /painel` é uma lista de `PrioridadeSubprefeitura`, ordenada por `indice_prioridade` decrescente (sem o índice, da maior para a menor `prioridade`). Além dos campos de relatos que já existiam, o schema tem cinco campos **opcionais**, calculados a partir de dados reais; quem já consome a rota não precisa mudar nada, e a API simplesmente omite o campo (nunca devolve `null`) quando o pipeline não o envia:
+
+| Campo | O que é |
+|---|---|
+| `reclamacoes_calcada_sp156` | Solicitações de calçada (calçada pública, particular e acessibilidade) no SP156, no período carregado |
+| `reclamacoes_guia_sarjeta_sp156` | Solicitações de guia e sarjeta no SP156, no mesmo período |
+| `atropelamentos_pedestres` | Sinistros do Infosiga com ao menos um pedestre, com o ponto dentro da subprefeitura |
+| `pedestres_mortos` | Pedestres mortos nesses sinistros |
+| `indice_prioridade` | De 0 a 1, relativo entre as 32 subprefeituras: média de `atropelamentos_pedestres` e `reclamacoes_calcada_sp156`, cada um normalizado pelo mínimo e pelo máximo. `prioridade` é a faixa desse índice (terço de cima `alta`, do meio `media`, de baixo `baixa`), ou seja, é **relativa**, não um limite absoluto |
+
+**De onde vem o `painel.json`.** A API não calcula o painel: ela serve o arquivo que o pipeline de dados ([passo-seguro-dados](https://github.com/Passo-Seguro/passo-seguro-dados)) exporta. O caminho é:
+
+```
+SP156 + Infosiga ──► Bronze ──► Prata ──► Ouro: view workspace.gs.vw_prioridades (Databricks)
+                                                         │  notebook databricks/05_export.py
+                                                         ▼
+                                  painel.json no container privado "painel" (Azure Blob Storage)
+                                                         │  leitura com a identidade gerenciada da API
+                                                         ▼
+                                       GET /painel  ──►  tela "Painel" do app
+```
+
+- **Produção:** a API lê `PAINEL_BLOB_URL` (URL do blob, **sem SAS e sem chave**) com `azure-identity` (`DefaultAzureCredential`) e `azure-storage-blob`. A identidade gerenciada da API tem o papel *Storage Blob Data Reader* só nesse container (Terraform em [`infra/`](./infra/README.md)). O resultado validado fica em memória por 10 minutos, então um novo `painel.json` aparece na API em até 10 minutos.
+- **Desenvolvimento:** `PAINEL_JSON_PATH` aponta para um arquivo local (por padrão, [`docs/exemplos/vw_prioridades.json`](./docs/exemplos/vw_prioridades.json), fictício), relido a cada chamada. Se as duas variáveis existirem, vale a URL do blob.
+- **Validação:** a API confere o arquivo contra o schema do contrato (até 5 MB). Sem o arquivo: `404 painel_indisponivel`. Arquivo fora do schema ou falha na leitura do blob: `503 painel_invalido`, sem repassar o conteúdo; o motivo vai para o log, sem valores do arquivo.
+- **Quem grava** o `painel.json` no container é o pipeline de dados; a escrita não é concedida pelo Terraform deste repositório.
+
+A tela do app mostra, por subprefeitura, a prioridade, o índice, os atropelamentos de pedestres e as reclamações de calçada (quando vierem), ordenadas pelo índice, com a data de `atualizado_em` e a legenda da fonte. Os relatos do app continuam **simulados** nesta versão ([`docs/dados-simulados.md`](./docs/dados-simulados.md)).
 
 ### Classes de problema
 
@@ -234,9 +265,9 @@ Os testes usam um Postgres+PostGIS de teste (`TEST_DATABASE_URL`, padrão `passo
 |---|---|---|
 | Visão (`POST /deteccoes` do colega) | `VISAO_URL`, `VISAO_TOKEN`, `VISAO_TIMEOUT_S`, `USE_FAKE_VISAO` | O relato é criado do mesmo jeito, com `categoria` e `confianca` nulas. |
 | Assistente (`POST /assistente` do colega) | `ASSISTENTE_URL`, `ASSISTENTE_TOKEN`, `ASSISTENTE_TIMEOUT_S`, `USE_FAKE_ASSISTENTE`, `SP156_URL` | `POST /assistente` responde `recusou: true` com mensagem padrão e o link do [SP156](https://sp156.prefeitura.sp.gov.br/). |
-| Pipeline de dados (view `vw_prioridades`) | `PAINEL_EXPORT_PATH` | `GET /painel` responde 404 (`painel_indisponivel`). |
+| Pipeline de dados (view `vw_prioridades`) | `PAINEL_BLOB_URL` (produção), `PAINEL_JSON_PATH` (desenvolvimento) | `GET /painel` responde 404 (`painel_indisponivel`); leitura ou arquivo com problema, 503 (`painel_invalido`). |
 
-`USE_FAKE_VISAO` e `USE_FAKE_ASSISTENTE` trocam o serviço por um falso e ficam **desligados por padrão** (código, `.env.example` e `docker-compose.dev.yml`). A "classe" da visão falsa sai do hash da imagem, **não** da foto: se um avaliador testar com ela, vai parecer erro do modelo. **Não use em demonstração nem em produção.** Para desenvolver sem os serviços reais, ligue de propósito: `docker compose -f docker-compose.dev.yml -f docker-compose.fakes.yml up`. Com qualquer fake ligado a API avisa no log (`modo_fake_ativo`, nível WARNING), em `GET /health` (`modo_fake` e `alertas`; continua 200) e na métrica `passo_seguro_modo_fake{servico=...}` (1 = fake), para o DevOps montar um alerta. O painel é um **arquivo JSON**: uma lista de objetos no formato `PrioridadeSubprefeitura` do contrato (exemplo fictício em [`docs/exemplos/vw_prioridades.json`](./docs/exemplos/vw_prioridades.json); formato a confirmar com quem faz Big Data). Arquivo existente mas fora do schema: 503 `painel_invalido`.
+`USE_FAKE_VISAO` e `USE_FAKE_ASSISTENTE` trocam o serviço por um falso e ficam **desligados por padrão** (código, `.env.example` e `docker-compose.dev.yml`). A "classe" da visão falsa sai do hash da imagem, **não** da foto: se um avaliador testar com ela, vai parecer erro do modelo. **Não use em demonstração nem em produção.** Para desenvolver sem os serviços reais, ligue de propósito: `docker compose -f docker-compose.dev.yml -f docker-compose.fakes.yml up`. Com qualquer fake ligado a API avisa no log (`modo_fake_ativo`, nível WARNING), em `GET /health` (`modo_fake` e `alertas`; continua 200) e na métrica `passo_seguro_modo_fake{servico=...}` (1 = fake), para o DevOps montar um alerta. O painel é um **arquivo JSON**: uma lista de objetos no formato `PrioridadeSubprefeitura` do contrato (exemplo fictício em [`docs/exemplos/vw_prioridades.json`](./docs/exemplos/vw_prioridades.json); de onde ele vem e como a API o lê estão em [`GET /painel` e o `painel.json`](#get-painel-e-o-paineljson)). Arquivo existente mas fora do schema: 503 `painel_invalido`. Para ler o blob de produção na sua máquina, use `az login` e `PAINEL_BLOB_URL`; os testes não precisam de rede nem de credencial.
 
 **Emenda rc2 do contrato:** `GET /relatos/proximos`, `GET /meus-relatos`, `PATCH /relatos/{id}`, `autor_id` e `X-Device-Token` ficam isolados em `api/app/routers/rc2.py` e só existem com `HABILITAR_RC2=true` (ligado no `docker-compose.dev.yml`, desligado por padrão até o grupo aprovar o PR `feat/contratos-rc2`).
 
