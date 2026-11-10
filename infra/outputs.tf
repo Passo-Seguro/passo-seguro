@@ -32,7 +32,7 @@ output "key_vault_name" {
 }
 
 output "storage_account_name" {
-  description = "Nome da conta de armazenamento (share fotos e container ouro-export)."
+  description = "Nome da conta de armazenamento (share fotos e containers ouro-export e painel)."
   value       = azurerm_storage_account.main.name
 }
 
@@ -54,4 +54,9 @@ output "tenant_id" {
 output "subscription_id" {
   description = "ID da assinatura (AZURE_SUBSCRIPTION_ID no GitHub)."
   value       = data.azurerm_client_config.current.subscription_id
+}
+
+output "painel_blob_url" {
+  description = "URL do painel.json (container privado \"painel\"), sem SAS nem chave. É o destino do pipeline de dados."
+  value       = local.painel_blob_url
 }

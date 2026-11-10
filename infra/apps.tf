@@ -146,10 +146,17 @@ resource "azurerm_container_app" "api" {
         name  = "HABILITAR_RC2"
         value = "true"
       }
-      # Arquivo JSON do painel (formato: docs/exemplos/vw_prioridades.json), no share "painel".
+      # painel.json no container de blob "painel" (formato: docs/exemplos/vw_prioridades.json).
+      # URL sem SAS e sem chave: a API autentica com a identidade gerenciada (papel Storage Blob
+      # Data Reader, só nesse container). Como a identidade é user-assigned, o
+      # DefaultAzureCredential precisa do client_id dela em AZURE_CLIENT_ID (não é segredo).
       env {
-        name  = "PAINEL_EXPORT_PATH"
-        value = "/data/painel/vw_prioridades.json"
+        name  = "PAINEL_BLOB_URL"
+        value = local.painel_blob_url
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.apps.client_id
       }
       env {
         name  = "ASSISTENTE_URL"
@@ -237,6 +244,7 @@ resource "azurerm_container_app" "api" {
 
   depends_on = [
     time_sleep.rbac_apps,
+    azurerm_role_assignment.apps_painel_leitura,
     azurerm_postgresql_flexible_server_configuration.extensoes, # PostGIS liberado antes da migração
   ]
 }

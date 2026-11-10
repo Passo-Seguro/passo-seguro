@@ -26,6 +26,15 @@ resource "time_sleep" "rbac_apps" {
   depends_on = [azurerm_role_assignment.apps_secrets_user]
 }
 
+# Leitura do painel: a API lê o painel.json do container "painel" com esta identidade (via
+# DefaultAzureCredential). Escopo SÓ no container (nem a conta, nem o ouro-export) e papel só de
+# leitura. Quem GRAVA o arquivo (o pipeline de dados) é outra identidade e não é concedida aqui.
+resource "azurerm_role_assignment" "apps_painel_leitura" {
+  scope                = azurerm_storage_container.painel.id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = azurerm_user_assigned_identity.apps.principal_id
+}
+
 # ---------- Identidade do pipeline (GitHub Actions via OIDC) ----------
 # Sem senha e sem App Registration no Entra ID: a identidade gerenciada recebe uma credencial
 # federada que só aceita o token do GitHub emitido para este repositório e este environment.

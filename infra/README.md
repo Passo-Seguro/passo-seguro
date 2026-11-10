@@ -7,13 +7,13 @@ internet ──► ca-passoseguro-app (nginx, ingress externo, 8080)
                     │  http://ca-passoseguro-api (nome interno)
                     ▼
              ca-passoseguro-api (FastAPI, ingress interno, 8000) ──► Azure Files "fotos" (/data/fotos)
-                    │                                           └──► Azure Files "painel" (/data/painel, só leitura)
+                    │                                           └──► Blob "painel" (painel.json, leitura com identidade gerenciada)
                     │ 5432, só pela rede privada
                     ▼
              PostgreSQL Flexible Server 16 + PostGIS (snet-db, sem endereço público)
 
 Key Vault ── segredos (lidos pelos apps com a identidade id-passoseguro-apps)
-Storage   ── shares "fotos" e "painel" + container "ouro-export" (Big Data)
+Storage   ── share "fotos" + containers de blob "painel" e "ouro-export" (Big Data); share "painel" é legado
 Log Analytics, alerta de 5xx e orçamento mensal por e-mail
 ```
 
@@ -22,9 +22,9 @@ Log Analytics, alerta de 5xx e orçamento mensal por e-mail
 | `base.tf` | resource group `rg-passoseguro-prod`, sufixo dos nomes globais, tags |
 | `rede.tf` | VNet `10.20.0.0/16`, `snet-aca`, `snet-db` e os NSGs |
 | `banco.tf` | PostgreSQL Flexible Server, DNS privado, PostGIS, banco `passo_seguro` |
-| `storage.tf` | conta de armazenamento, shares `fotos` e `painel`, container `ouro-export` |
+| `storage.tf` | conta de armazenamento, share `fotos`, containers `painel` e `ouro-export` (e o share `painel`, legado) |
 | `segredos.tf` | Key Vault e os segredos (gerados pelo Terraform) |
-| `identidade.tf` | `id-passoseguro-apps` (lê segredos) e `id-passoseguro-github` (pipeline, OIDC) |
+| `identidade.tf` | `id-passoseguro-apps` (lê segredos e o container `painel`) e `id-passoseguro-github` (pipeline, OIDC) |
 | `apps.tf` | ambiente de Container Apps, `ca-passoseguro-api` e `ca-passoseguro-app` |
 | `monitoramento.tf` | Log Analytics, grupo de ação por e-mail e alerta de 5xx |
 | `orcamento.tf` | orçamento mensal com avisos em 50%, 80% e 100% |
@@ -173,17 +173,21 @@ O Terraform ignora mudanças na imagem dos contêineres (`ignore_changes`), ent�
 
 ## 5. Subir o arquivo do painel
 
-`GET /painel` lê um arquivo JSON exportado pelo pipeline de dados. O Container Apps só monta **Azure Files** (não monta blob), então o arquivo mora no share `painel`, montado **somente leitura** na API em `/data/painel`; a API lê `PAINEL_EXPORT_PATH=/data/painel/vw_prioridades.json` a cada chamada, então não precisa reiniciar nada. O container de blob `ouro-export` continua sendo a saída da parte de Big Data; quem publica o painel copia o resultado para o share.
+`GET /painel` lê o `painel.json` exportado pelo pipeline de dados, que fica no container de blob **privado** `painel` (sem acesso anônimo) da conta de armazenamento. A API o lê **sem SAS e sem chave**: a identidade gerenciada `id-passoseguro-apps` tem o papel *Storage Blob Data Reader* com escopo **só nesse container**, e a API recebe `PAINEL_BLOB_URL` (saída `painel_blob_url`) e `AZURE_CLIENT_ID` (o `client_id` dessa identidade, que o `DefaultAzureCredential` precisa para escolher a identidade user-assigned; não é segredo). O resultado validado fica em memória por 10 minutos, então um arquivo novo aparece em até 10 minutos, sem reiniciar nada.
 
-Enquanto o arquivo não existir, `GET /painel` responde 404 (`painel_indisponivel`), o que é o comportamento esperado do primeiro deploy. O formato é uma lista de `PrioridadeSubprefeitura` do contrato; use [`docs/exemplos/vw_prioridades.json`](../docs/exemplos/vw_prioridades.json) como modelo (até 5 MB; fora do schema, a API responde 503 `painel_invalido`).
+Enquanto o arquivo não existir, `GET /painel` responde 404 (`painel_indisponivel`), o que é o comportamento esperado do primeiro deploy. Arquivo fora do schema do contrato (até 5 MB) ou falha na leitura: 503 (`painel_invalido`), com o motivo no log. O formato é uma lista de `PrioridadeSubprefeitura`; use [`docs/exemplos/vw_prioridades.json`](../docs/exemplos/vw_prioridades.json) como modelo.
+
+Quem **grava** é o pipeline de dados, com uma identidade dele; este Terraform não concede escrita. Para um teste manual, quem tem o papel *Storage Blob Data Contributor* (o dono da assinatura não o tem por padrão) envia sem usar a chave da conta:
 
 ```bash
 cd infra
-az storage file upload   --account-name "$(terraform output -raw storage_account_name)"   --share-name painel   --source ../docs/exemplos/vw_prioridades.json   --path vw_prioridades.json   --auth-mode key          # usa a chave da conta (quem tem papel Owner/Contributor na assinatura consegue lê-la)
+az storage blob upload   --account-name "$(terraform output -raw storage_account_name)"   --container-name painel   --name painel.json   --file ../docs/exemplos/vw_prioridades.json   --overwrite   --auth-mode login
 curl "$(terraform output -raw app_url)/api/painel"
 ```
 
-O nome do arquivo no share precisa ser exatamente `vw_prioridades.json`. Para enviar sem a chave da conta, troque por `--auth-mode login --enable-file-backup-request-intent` (exige o papel *Storage File Data Privileged Contributor* no share). O pipeline de dados deve **sobrescrever** o arquivo com o mesmo comando; uma leitura exatamente durante a troca pode dar um 503 isolado.
+O nome do blob precisa ser exatamente `painel.json`. O pipeline deve **sobrescrever** o blob (a troca é atômica; a API nunca lê um arquivo pela metade).
+
+> **Legado:** o share `painel` (Azure Files, montado em `/data/painel`) era o caminho antigo, quando a API lia `PAINEL_EXPORT_PATH`. A API não lê mais esse arquivo e a variável deixou de ser entregue; o share e o volume continuam declarados só para o `apply` não apagar nada. Podem ser removidos num PR próprio, depois que o `painel.json` do blob estiver no ar.
 
 ## Decisões e cuidados
 
@@ -191,7 +195,7 @@ O nome do arquivo no share precisa ser exatamente `vw_prioridades.json`. Para en
 - **Login do pipeline (OIDC)**: o repositório usa o subject *imutável* do GitHub, então a credencial federada `github-environment-production` aceita `repo:Passo-Seguro@<id da org>/passo-seguro@<id do repo>:environment:production`, e não o formato com nomes. Se o login da Azure falhar com `AADSTS700213`, compare o `subject` de `identidade.tf` com o que o job mostra em "Federated token details" (ou com `gh api repos/Passo-Seguro/passo-seguro/actions/oidc/customization/sub`). O ID do repositório muda se ele for apagado e recriado; um rename não o altera.
 - **Rede**: o Postgres não tem endereço público; só `snet-aca` alcança a porta 5432. O NSG de `snet-aca` só aceita 80 e 443 da internet. Não existe regra para 22, 3389 nem porta de administração. A API tem ingress interno.
 - **Ingress da API aceita HTTP** (`allow_insecure_connections = true`) porque o nginx a chama por `http://ca-passoseguro-api` dentro do ambiente; com a opção desligada o ingress responderia um redirecionamento para HTTPS e o nginx não o seguiria. O app público força HTTPS.
-- **Painel em Azure Files, não em blob**: o Container Apps não monta blob. O share `painel` (1 GB) é montado só leitura na API; a escrita é de quem tem a chave da conta, pelo `az storage file upload` da seção 5.
+- **Painel em blob, lido pela API com identidade gerenciada**: nada de montar volume. O papel *Storage Blob Data Reader* é concedido só no container `painel` (não na conta, nem no `ouro-export`). A identidade `id-passoseguro-apps` é compartilhada pelos dois Container Apps, então o app (nginx) também a recebe, mas não usa o papel; separar uma identidade só da API é uma melhoria futura.
 - **`METRICS_TOKEN` na API e no app**: os dois usam o mesmo segredo `metrics-token`. O nginx do app confere em `/metrics/api` e repassa o cabeçalho; a API confere de novo (sem o token configurado ela responde 401 sempre).
 - **`HABILITAR_RC2=true`**: a emenda rc2 do contrato (`/relatos/proximos`, `/meus-relatos`, `PATCH /relatos/{id}`) é o que o app usa. Com a flag, `SALT_AUTOR` é obrigatório (já é entregue).
 - **Storage com chave habilitada**: o Container Apps só monta Azure Files com a chave da conta. O firewall do storage fica aberto porque o Databricks lê o `ouro-export` de fora da VNet. Em produção real: private endpoint.
@@ -206,7 +210,7 @@ O nome do arquivo no share precisa ser exatamente `vw_prioridades.json`. Para en
 Não são da infraestrutura, mas o que está descrito aqui depende delas:
 
 1. ~~**App (`app/`)**: nginx como *template* com proxy de `/api` e `VITE_API_URL=/api`.~~ Resolvido no PR #12: o nginx repassa `/api/` para `API_UPSTREAM`, bloqueia `/api/metrics` e serve `/metrics/api` com `METRICS_TOKEN`.
-2. ~~**API (`api/`)**: variáveis e migrações da `feat/api-integracao`, `METRICS_TOKEN` e `PAINEL_EXPORT_PATH`.~~ Resolvido: a branch já está na `main`, e a API agora recebe `METRICS_TOKEN` (mesmo segredo do app), `HABILITAR_RC2` e `PAINEL_EXPORT_PATH` (share `painel`). Falta só **subir o primeiro arquivo do painel** (seção 5); até lá `GET /painel` dá 404.
+2. ~~**API (`api/`)**: variáveis e migrações da `feat/api-integracao`, `METRICS_TOKEN` e `PAINEL_EXPORT_PATH`.~~ Resolvido: a branch já está na `main`, e a API agora recebe `METRICS_TOKEN` (mesmo segredo do app), `HABILITAR_RC2`, `PAINEL_BLOB_URL` e `AZURE_CLIENT_ID` (container `painel`; o share `painel` e `PAINEL_EXPORT_PATH` são legado). Falta só **o pipeline de dados gravar o primeiro `painel.json` no container** (seção 5); até lá `GET /painel` dá 404.
 3. ~~**Workflow de deploy** (`.github/workflows/`)~~ Resolvido: o job `deploy` do [`ci.yml`](../.github/workflows/ci.yml) usa `id-passoseguro-github` (OIDC) e roda só em push na `main`.
 4. **Assistente**: `ASSISTENTE_URL` e `ASSISTENTE_TOKEN` já são entregues, mas o serviço do assistente não está em nenhum lugar da nuvem; sem ele `POST /assistente` responde a recusa padrão com o link do SP156. O mesmo vale para a visão (`VISAO_URL`/`VISAO_TOKEN` não são entregues ainda: sem eles o relato nasce sem categoria).
 
