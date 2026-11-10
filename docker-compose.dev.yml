@@ -52,7 +52,7 @@ services:
       ASSISTENTE_URL: ${ASSISTENTE_URL:-}
       ASSISTENTE_TOKEN: ${ASSISTENTE_TOKEN:-}
       # Painel: arquivo exportado pelo pipeline de dados. Aqui, um exemplo fictício do repositório.
-      PAINEL_EXPORT_PATH: /data/painel/vw_prioridades.json
+      PAINEL_JSON_PATH: /data/painel/vw_prioridades.json
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     ports:

@@ -236,7 +236,8 @@ export interface paths {
          * Prioridades por subprefeitura
          * @description Chamado pelo **app**. Devolve as prioridades por subprefeitura, lidas da view
          *     `vw_prioridades` da camada Ouro, exportada pelo pipeline de dados para a API. Os
-         *     itens vêm ordenados da maior para a menor prioridade.
+         *     itens vêm ordenados por `indice_prioridade` decrescente (quando o pipeline envia o índice;
+         *     sem ele, da maior para a menor `prioridade`).
          *
          *     Se o arquivo exportado existir mas estiver fora deste schema, a API responde **503**
          *     `painel_invalido` (e não repassa o conteúdo). Sem arquivo, 404.
@@ -579,6 +580,10 @@ export interface components {
         PrioridadeSubprefeitura: {
             /** @example Sé */
             subprefeitura: string;
+            /**
+             * @description Faixa **relativa**: a posição de `indice_prioridade` entre as 32 subprefeituras (terço de
+             *     cima `alta`, do meio `media`, de baixo `baixa`), e não um limite absoluto.
+             */
             prioridade: components["schemas"]["Prioridade"];
             /**
              * @description Relatos ainda não resolvidos nem rejeitados.
@@ -598,7 +603,8 @@ export interface components {
                 [key: string]: number;
             };
             /**
-             * @description Tempo médio até o reparo, em dias; nulo quando ainda não há reparos.
+             * @description Tempo médio até o reparo, em dias, calculado sobre as solicitações do **SP156
+             *     finalizadas** (relatos do app não têm data de conclusão); nulo quando ainda não há reparos.
              * @example 41.5
              */
             tempo_medio_ate_reparo_dias?: number | null;
@@ -608,6 +614,38 @@ export interface components {
              * @example 2026-11-04T06:00:00-03:00
              */
             atualizado_em: string;
+            /**
+             * @description Solicitações de **calçada** registradas no SP156 (Prefeitura) na subprefeitura, em todo o
+             *     período carregado pelo pipeline. Reúne os serviços de calçada pública, calçada particular e
+             *     acessibilidade. Guia e sarjeta ficam em `reclamacoes_guia_sarjeta_sp156`. Opcional.
+             * @example 282
+             */
+            reclamacoes_calcada_sp156?: number;
+            /**
+             * @description Solicitações de **guia e sarjeta** registradas no SP156 na subprefeitura, no mesmo período.
+             *     Opcional.
+             * @example 122
+             */
+            reclamacoes_guia_sarjeta_sp156?: number;
+            /**
+             * @description Sinistros de trânsito com ao menos um pedestre (Infosiga) cujo ponto cai na subprefeitura.
+             *     Sinistros sem coordenada não entram em nenhuma subprefeitura. Opcional.
+             * @example 89
+             */
+            atropelamentos_pedestres?: number;
+            /**
+             * @description Pedestres mortos nesses sinistros. Opcional.
+             * @example 2
+             */
+            pedestres_mortos?: number;
+            /**
+             * @description Índice relativo entre as 32 subprefeituras: média de `atropelamentos_pedestres` e
+             *     `reclamacoes_calcada_sp156`, cada um normalizado de 0 a 1 pelo mínimo e máximo entre as
+             *     subprefeituras. 1 lidera os dois indicadores; 0 está no piso dos dois. `prioridade` é a faixa
+             *     deste índice (terço de cima `alta`, do meio `media`, de baixo `baixa`). Opcional.
+             * @example 0.972
+             */
+            indice_prioridade?: number;
         };
         /** @description Informações de paginação. */
         Paginacao: {

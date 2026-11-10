@@ -5,6 +5,7 @@ import type { PrioridadeSubprefeitura } from '../api/tipos';
 import { Pagina } from '../components/Pagina';
 import { SeloPrioridade } from '../components/Selos';
 import { CATEGORIAS, ROTULO_CATEGORIA, formatarData } from '../lib/dominio';
+import { LEGENDA_FONTE, ordenarPorIndice } from '../lib/painel';
 
 type Carga =
   | { fase: 'carregando' }
@@ -14,6 +15,42 @@ type Carga =
 
 const numero = new Intl.NumberFormat('pt-BR');
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+const indice = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+
+/** Indicadores reais (SP156 e Infosiga). Cada um só aparece se o pipeline o enviou. */
+function Indicadores({ linha }: { linha: PrioridadeSubprefeitura }) {
+  const { indice_prioridade: idx, atropelamentos_pedestres: atrop, reclamacoes_calcada_sp156: calcada } = linha;
+  if (idx == null && atrop == null && calcada == null) return null;
+  return (
+    <dl className="painel-indicadores">
+      {idx != null && (
+        <div className="painel-indicador">
+          <dt>Índice de prioridade</dt>
+          <dd>
+            <div className="celula-barra">
+              <span className="barra" aria-hidden="true">
+                <span className="barra-preenchida" style={{ width: `${Math.min(1, Math.max(0, idx)) * 100}%` }} />
+              </span>
+              <span className="barra-valor">{indice.format(idx)}</span>
+            </div>
+          </dd>
+        </div>
+      )}
+      {atrop != null && (
+        <div className="painel-indicador">
+          <dt>Atropelamentos de pedestres</dt>
+          <dd>{numero.format(atrop)}</dd>
+        </div>
+      )}
+      {calcada != null && (
+        <div className="painel-indicador">
+          <dt>Reclamações de calçada</dt>
+          <dd>{numero.format(calcada)}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
 
 function Cartao({ linha }: { linha: PrioridadeSubprefeitura }) {
   const maior = Math.max(1, ...CATEGORIAS.map((c) => linha.relatos_por_categoria[c] ?? 0));
@@ -23,6 +60,8 @@ function Cartao({ linha }: { linha: PrioridadeSubprefeitura }) {
       <p className="selos">
         <SeloPrioridade prioridade={linha.prioridade} />
       </p>
+
+      <Indicadores linha={linha} />
 
       <p className="painel-total">
         <span className="painel-numero">{numero.format(linha.relatos_abertos)}</span>{' '}
@@ -76,7 +115,7 @@ export function Painel() {
   useEffect(() => {
     const controlador = new AbortController();
     obterPainel(controlador.signal)
-      .then((linhas) => setCarga(linhas === null || linhas.length === 0 ? { fase: 'vazio' } : { fase: 'ok', linhas }))
+      .then((linhas) => setCarga(linhas === null || linhas.length === 0 ? { fase: 'vazio' } : { fase: 'ok', linhas: ordenarPorIndice(linhas) }))
       .catch((e) => {
         if (controlador.signal.aborted) return;
         console.warn('Falha ao carregar o painel', e);
@@ -130,6 +169,7 @@ export function Painel() {
               <Cartao key={linha.subprefeitura} linha={linha} />
             ))}
           </ol>
+          <p className="painel-fonte">{LEGENDA_FONTE}</p>
         </>
       )}
     </Pagina>

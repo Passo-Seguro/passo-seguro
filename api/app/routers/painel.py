@@ -1,7 +1,8 @@
 """GET /painel: prioridades por subprefeitura (público).
 
-Lê o arquivo JSON exportado pelo pipeline de dados (PAINEL_EXPORT_PATH) e valida contra o
-schema do contrato. Sem arquivo: 404 `painel_indisponivel`.
+Lê o painel.json exportado pelo pipeline de dados (PAINEL_BLOB_URL em produção, PAINEL_JSON_PATH
+em desenvolvimento) e valida contra o schema do contrato. Sem arquivo: 404 `painel_indisponivel`;
+arquivo ou leitura com problema: 503 `painel_invalido`.
 """
 
 from typing import Annotated
@@ -24,4 +25,4 @@ router = APIRouter(tags=["Painel"])
     responses={404: {"model": Erro}, 503: {"model": Erro}},
 )
 def obter_painel(settings: Annotated[Settings, Depends(get_settings)]) -> list[PrioridadeSubprefeitura]:
-    return ler_painel(settings.painel_export_path)
+    return ler_painel(settings.painel_json_path, blob_url=settings.painel_blob_url)

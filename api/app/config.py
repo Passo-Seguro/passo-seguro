@@ -74,10 +74,13 @@ class Settings(BaseSettings):
     # Canal oficial da Prefeitura (portal SP156; também atende pelo telefone 156).
     sp156_url: str = "https://sp156.prefeitura.sp.gov.br/"
 
-    # Arquivo JSON exportado pelo pipeline de dados (view vw_prioridades da camada Ouro).
-    # Formato: lista de objetos no schema PrioridadeSubprefeitura do contrato (a confirmar com
-    # quem faz Big Data). Sem o arquivo, GET /painel responde 404.
-    painel_export_path: Path | None = None
+    # Painel de prioridades: painel.json exportado pelo pipeline de dados (view vw_prioridades
+    # da camada Ouro), uma lista de objetos no schema PrioridadeSubprefeitura do contrato.
+    # Produção: URL do blob (sem SAS e sem chave; a API entra com a identidade gerenciada).
+    # Desenvolvimento: caminho de um arquivo local. A URL vence se as duas vierem.
+    # Sem nenhuma das duas, ou sem o arquivo, GET /painel responde 404.
+    painel_blob_url: str = ""
+    painel_json_path: Path | None = None
 
     # Emenda rc2 do contrato (autor_id, X-Device-Token, /relatos/proximos, /meus-relatos e
     # PATCH /relatos/{id}). DESLIGADA até o grupo aprovar o contrato rc2.

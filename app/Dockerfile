@@ -40,8 +40,12 @@ ENV NGINX_ENVSUBST_FILTER='^(API_UPSTREAM|METRICS_TOKEN)$'
 
 # A imagem base sai com pacotes do Alpine (openssl, curl, expat, zlib, musl, o próprio nginx…) já
 # com correção de segurança publicada: atualiza todos no build (precisa de root, uid 0; volta ao 101).
+# APK_ATUALIZADO entra na chave do cache da camada: o cache de camadas do CI reaproveitaria um
+# "apk upgrade" antigo e a imagem sairia sem as correções publicadas depois. Troque a data quando
+# o Trivy reprovar por pacote com correção disponível que o upgrade não trouxe.
+ARG APK_ATUALIZADO=2026-11-10
 USER 0
-RUN apk upgrade --no-cache
+RUN echo "pacotes do Alpine atualizados em ${APK_ATUALIZADO}" && apk upgrade --no-cache
 USER 101
 
 # O modelo vira /etc/nginx/conf.d/default.conf na partida (a imagem deixa conf.d com dono

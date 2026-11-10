@@ -40,6 +40,8 @@ _CAMPOS_PERMITIDOS = (
     "tipo_erro",
     "local_erro",
     "evento",
+    "origem",
+    "motivo",
     "servico",
 )
 
