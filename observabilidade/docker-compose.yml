@@ -1,0 +1,65 @@
+# Prometheus + Grafana LOCAIS, para gerar a evidência de observabilidade (quatro sinais de ouro
+# e alertas). Sobem no notebook, só quando for preciso: cada raspagem acorda a API, que escala a zero.
+#
+#   cp .env.example .env          # preencha a senha do Grafana, PUBLIC_URL e o webhook do Discord
+#   ./preparar.sh                 # gera prometheus/alvos/api.json a partir de PUBLIC_URL
+#   docker compose up -d
+#
+# Grafana:    http://127.0.0.1:3000   (usuário e senha do .env)
+# Prometheus: http://127.0.0.1:9090
+# As portas só escutam em 127.0.0.1: nada disto fica exposto na rede.
+
+name: passo-seguro-obs
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/regras.yml:/etc/prometheus/regras.yml:ro
+      - ./prometheus/alvos:/etc/prometheus/alvos:ro
+      # Segredo da raspagem (Authorization: Bearer). Fora do git: veja o README.
+      - ./metrics-token:/etc/prometheus/metrics-token:ro
+      - prometheus-dados:/prometheus
+
+  grafana:
+    image: grafana/grafana:13.2.5
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env}
+      # O link do painel nas mensagens de alerta é montado a partir desta URL.
+      GF_SERVER_ROOT_URL: http://127.0.0.1:3000
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DEFAULT_TIMEZONE: America/Sao_Paulo
+      # Webhook do Discord: nunca versionado. Entra no ponto de contato por interpolação.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:?defina DISCORD_WEBHOOK_URL no .env}
+      # E-mail como alternativa (veja o ponto de contato comentado em provisioning/alerting):
+      # GF_SMTP_ENABLED: "true"
+      # GF_SMTP_HOST: smtp.gmail.com:587
+      # GF_SMTP_USER: ${SMTP_USER}
+      # GF_SMTP_PASSWORD: ${SMTP_PASSWORD}
+      # GF_SMTP_FROM_ADDRESS: ${SMTP_USER}
+      # ALERTA_EMAIL: ${ALERTA_EMAIL}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-dados:/var/lib/grafana
+
+volumes:
+  prometheus-dados:
+  grafana-dados:

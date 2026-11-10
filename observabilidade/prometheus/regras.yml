@@ -1,0 +1,74 @@
+# Recording rules dos quatro sinais de ouro. Os rótulos da API são em português (metodo, rota,
+# status). Janela de 2 minutos = 4 raspagens de 30 s.
+#
+# A raspagem do /metrics e as sondas de saúde também passam pelo middleware da API e são
+# contadas; todas as regras as excluem (rota!~"/metrics|/saude|/health"), senão o tráfego nunca
+# seria zero e a razão de erros ficaria diluída.
+#
+# Quantis: sem observações na janela, histogram_quantile devolveria NaN; o "and" mantém a regra
+# sem dados (em vez de NaN) quando não houve nenhuma requisição.
+#
+# Sem tráfego, as razões de erro NÃO viram 0/0: o denominador filtra "> 0" e a regra fica sem
+# dados (os alertas tratam "sem dados" como OK). Quando há tráfego mas nunca houve 5xx, o
+# numerador seria vazio; o "or" o completa com 0.
+groups:
+  - name: passo_seguro_latencia
+    interval: 30s
+    rules:
+      - record: passo_seguro:http_latencia_p50_segundos:rate2m
+        expr: |
+          histogram_quantile(0.50,
+            sum by (le) (rate(passo_seguro_http_request_duration_seconds_bucket{rota!~"/metrics|/saude|/health"}[2m])))
+          and on() (sum(rate(passo_seguro_http_request_duration_seconds_count{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+      - record: passo_seguro:http_latencia_p95_segundos:rate2m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(passo_seguro_http_request_duration_seconds_bucket{rota!~"/metrics|/saude|/health"}[2m])))
+          and on() (sum(rate(passo_seguro_http_request_duration_seconds_count{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+      - record: passo_seguro:http_latencia_p50_segundos_por_rota:rate2m
+        expr: |
+          histogram_quantile(0.50,
+            sum by (le, rota) (rate(passo_seguro_http_request_duration_seconds_bucket{rota!~"/metrics|/saude|/health"}[2m])))
+          and on(rota) (sum by (rota) (rate(passo_seguro_http_request_duration_seconds_count{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+      - record: passo_seguro:http_latencia_p95_segundos_por_rota:rate2m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, rota) (rate(passo_seguro_http_request_duration_seconds_bucket{rota!~"/metrics|/saude|/health"}[2m])))
+          and on(rota) (sum by (rota) (rate(passo_seguro_http_request_duration_seconds_count{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+
+  - name: passo_seguro_trafego
+    interval: 30s
+    rules:
+      - record: passo_seguro:http_requisicoes_por_segundo:rate2m
+        expr: sum(rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health"}[2m]))
+      - record: passo_seguro:http_requisicoes_por_segundo_por_rota:rate2m
+        expr: sum by (rota) (rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health"}[2m]))
+
+  - name: passo_seguro_erros
+    interval: 30s
+    rules:
+      - record: passo_seguro:http_taxa_5xx:rate2m
+        expr: |
+          (
+            sum(rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health", status=~"5.."}[2m]))
+            or vector(0)
+          )
+          / (sum(rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+      - record: passo_seguro:http_taxa_5xx_por_rota:rate2m
+        expr: |
+          (
+            sum by (rota) (rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health", status=~"5.."}[2m]))
+            or
+            (sum by (rota) (rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health"}[2m])) * 0)
+          )
+          / (sum by (rota) (rate(passo_seguro_http_requests_total{rota!~"/metrics|/saude|/health"}[2m])) > 0)
+
+  - name: passo_seguro_saturacao
+    interval: 30s
+    rules:
+      # Em vCPU (1 = um núcleo inteiro). Limite do Container App da API: 0,5 vCPU.
+      - record: passo_seguro:processo_cpu_vcpu:rate2m
+        expr: sum(rate(process_cpu_seconds_total{job="api"}[2m]))
+      # Memória residente do processo da API, em bytes. Limite do Container App: 1 GiB.
+      - record: passo_seguro:processo_memoria_residente_bytes
+        expr: max(process_resident_memory_bytes{job="api"})

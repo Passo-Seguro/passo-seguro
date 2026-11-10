@@ -1,0 +1,24 @@
+# O Prometheus não expande variáveis no YAML; por isso o endereço da API vem de um arquivo de
+# descoberta (alvos/api.json) que o preparar.sh gera a partir de PUBLIC_URL.
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/regras.yml
+
+scrape_configs:
+  # O nginx do app expõe a raspagem da API em https://<app>/metrics/api, só com o token.
+  # Cada raspagem acorda a API se ela estiver escalada a zero.
+  - job_name: api
+    scheme: https
+    metrics_path: /metrics/api
+    scrape_interval: 30s
+    # Folga para a partida a frio; tem de ser menor que o intervalo.
+    scrape_timeout: 25s
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics-token
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/alvos/api.json
