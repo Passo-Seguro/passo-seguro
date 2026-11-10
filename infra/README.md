@@ -102,6 +102,8 @@ terraform plan -out=passoseguro.tfplan
 terraform apply passoseguro.tfplan
 ```
 
+> **O `terraform apply` é sempre manual.** O pipeline ([`ci.yml`](../.github/workflows/ci.yml)) só publica as imagens no GHCR e roda `az containerapp update` para trocar a imagem de cada app; ele não executa Terraform. Mudanças em `infra/` só chegam à Azure quando alguém roda `plan`/`apply` na própria máquina, com os valores reais (incluindo `painel_publicadores_object_ids`) no `terraform.tfvars` local.
+
 O `apply` leva uns 15 a 20 minutos (Postgres e ambiente de Container Apps). Há duas esperas de 60 s de propósito, para o papel do Azure RBAC propagar antes de gravar segredos e subir os apps.
 
 Para **desligar tudo** (e parar de gastar crédito):
@@ -177,7 +179,7 @@ O Terraform ignora mudanças na imagem dos contêineres (`ignore_changes`), ent�
 
 Enquanto o arquivo não existir, `GET /painel` responde 404 (`painel_indisponivel`), o que é o comportamento esperado do primeiro deploy. Arquivo fora do schema do contrato (até 5 MB) ou falha na leitura: 503 (`painel_invalido`), com o motivo no log. O formato é uma lista de `PrioridadeSubprefeitura`; use [`docs/exemplos/vw_prioridades.json`](../docs/exemplos/vw_prioridades.json) como modelo.
 
-Quem **grava** é o pipeline de dados, com uma identidade dele. O Terraform concede escrita (*Storage Blob Data Contributor*, **só no container `painel`**) a cada object ID da variável `painel_publicadores_object_ids` (lista, vazia por padrão). Os IDs reais **não entram no git**: ponha no `infra/terraform.tfvars` (o git ignora `*.tfvars`) ou em `TF_VAR_painel_publicadores_object_ids`, e o pipeline que roda o `apply` precisa receber o mesmo valor por um segredo do ambiente.
+Quem **grava** é o pipeline de dados, com uma identidade dele. O Terraform concede escrita (*Storage Blob Data Contributor*, **só no container `painel`**) a cada object ID da variável `painel_publicadores_object_ids` (lista, vazia por padrão). Os IDs reais **não entram no git**: ponha no `infra/terraform.tfvars` (o git ignora `*.tfvars`) ou em `TF_VAR_painel_publicadores_object_ids`, e o `terraform apply` é **manual**, rodado por quem tem esse `terraform.tfvars` local: o pipeline do GitHub não aplica a infra e não conhece esses IDs.
 
 Como obter o object ID:
 
@@ -195,15 +197,32 @@ az identity show -g <resource group> -n <nome da identidade> --query principalId
 painel_publicadores_object_ids = ["<object id da pessoa>", "<object id do pipeline de dados>"]
 ```
 
-Quem não está na lista (nem o dono da assinatura, que não tem papel de dados por padrão) não consegue gravar. Depois do `apply`, o papel leva alguns minutos para propagar. Para um teste manual, quem está na lista envia sem usar a chave da conta:
+Quem não está na lista (nem o dono da assinatura, que não tem papel de dados por padrão) não consegue gravar. Depois do `terraform apply`, o papel leva alguns minutos para propagar.
+
+### Ordem de implantação deste PR
+
+1. **Merge na `main` primeiro.** O pipeline roda em push na `main`, publica a imagem nova da API (com a leitura do blob) e a coloca no Container App com `az containerapp update`.
+2. **Logo em seguida, `terraform apply` manual**, na máquina de quem tem o `terraform.tfvars` com os object ids. Ele cria o container `painel`, os papéis e entrega `PAINEL_BLOB_URL` e `AZURE_CLIENT_ID` à API.
+3. **No intervalo entre os dois, `GET /painel` responde 404** (`painel_indisponivel`): a imagem nova ainda não tem a URL do blob, ou o blob ainda não existe. É o comportamento esperado, e o resto da API não é afetado. Faça o `apply` logo depois do deploy para encurtar esse intervalo.
+4. Só depois publique o primeiro `painel.json` (abaixo).
+
+### Como publicar o `painel.json`
+
+Quem está em `painel_publicadores_object_ids` envia sem usar a chave da conta:
 
 ```bash
-cd infra
-az storage blob upload   --account-name "$(terraform output -raw storage_account_name)"   --container-name painel   --name painel.json   --file ../docs/exemplos/vw_prioridades.json   --overwrite   --auth-mode login
-curl "$(terraform output -raw app_url)/api/painel"
+az storage blob upload --auth-mode login --account-name <storage> -c painel -n painel.json -f painel.json --overwrite
+curl <app_url>/api/painel
 ```
 
-O nome do blob precisa ser exatamente `painel.json`. O pipeline deve **sobrescrever** o blob (a troca é atômica; a API nunca lê um arquivo pela metade).
+`<storage>` é a saída `storage_account_name` e `<app_url>` é a saída `app_url` (`terraform output -raw storage_account_name`, `terraform output -raw app_url`). Para um teste, o modelo é [`docs/exemplos/vw_prioridades.json`](../docs/exemplos/vw_prioridades.json).
+
+Se a conferência não mostrar o arquivo novo, lembre de dois atrasos:
+
+- **Cache de 10 minutos** na API: um `painel.json` novo (ou uma correção) aparece em até 10 minutos, sem reiniciar nada. Uma falha de leitura fica em cache por 30 s.
+- **Propagação do papel**: logo após o `apply`, o upload (papel de escrita) e a leitura da API (papel de leitura) podem falhar com 403 por alguns minutos. Espere e tente de novo.
+
+O nome do blob precisa ser exatamente `painel.json`. O pipeline de dados deve **sobrescrever** o blob (a troca é atômica; a API nunca lê um arquivo pela metade).
 
 > **Legado:** o share `painel` (Azure Files, montado em `/data/painel`) era o caminho antigo, quando a API lia `PAINEL_EXPORT_PATH`. A API não lê mais esse arquivo e a variável deixou de ser entregue; o share e o volume continuam declarados só para o `apply` não apagar nada. Podem ser removidos num PR próprio, depois que o `painel.json` do blob estiver no ar.
 
