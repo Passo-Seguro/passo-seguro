@@ -138,6 +138,7 @@ O pipeline ([`ci.yml`](../.github/workflows/ci.yml)) reprova achados do Trivy (H
 | Semgrep | `terraform.azure.security.keyvault.keyvault-purge-enabled.keyvault-purge-enabled` | `azurerm_key_vault.main` (`segredos.tf`) | Mesmo motivo do `AVD-AZU-0016`: purge protection desligada para o `destroy` funcionar na assinatura de estudante. | Purge protection ligada. |
 | Semgrep | `terraform.azure.security.keyvault.keyvault-specify-network-acl.keyvault-specify-network-acl` | `azurerm_key_vault.main` (`segredos.tf`) | Mesmo motivo do `AVD-AZU-0013`: acesso público aberto no MVP. | `network_acls` com `default_action = "Deny"` + service endpoint na `snet-aca`. |
 | Semgrep | `terraform.azure.security.storage.storage-queue-services-logging.storage-queue-services-logging` | `azurerm_storage_account.main` (`storage.tf`) | O Queue Storage não é usado nesta conta (só Azure Files e Blob): não há fila para registrar. | Sem mudança, a menos que passe a usar filas. |
+| Decisão de projeto (não é achado de ferramenta) | — | Rota `/fotos/*` da API (no app, `/api/fotos/*`; `api/app/main.py`) | Sem autenticação: a foto é pública para quem tiver a URL. A proteção é o nome do arquivo, `relatos/<uuid4>`, que não dá para adivinhar. A URL não sai nas rotas públicas do mapa, só em `GET /meus-relatos` (autor) e `GET /relatos` (token de serviço). A URL não expira nem se revoga. Detalhes em [`docs/devops/arquitetura.md`](../docs/devops/arquitetura.md#fotos-é-público-por-url-não-adivinhável). | URL assinada com validade curta (SAS) ou rota autenticada; desfoque de rostos e placas antes de gravar a foto (pendente, veja [`docs/devops/lgpd.md`](../docs/devops/lgpd.md)). |
 
 **Segredos com validade** (`terraform.azure.security.keyvault.keyvault-ensure-secret-expires`, Trivy `AVD-AZU-0017`): em vez de aceitar o risco, os 7 segredos do Key Vault têm `expiration_date` **fixa** em `2027-06-30T00:00:00Z` (`local.validade_segredos` em `segredos.tf`; nunca `timeadd`/`timestamp`, que mudariam a cada plan). A data cobre a entrega da GS e a correção. **Depois dela o segredo vence, o Container App deixa de lê-lo e a API cai**: antes de 30/06/2027, renove a data ou rotacione os segredos e rode o `apply`.
 
@@ -149,18 +150,19 @@ Depois do `apply`:
 terraform output
 ```
 
-No repositório, em **Settings → Environments → `production`** (o nome precisa ser exatamente esse, é o `subject` da credencial federada), crie estas **variáveis** (não são segredos):
+No repositório, em **Settings → Environments → `production`** (o nome precisa ser exatamente esse, é o `subject` da credencial federada), crie estes **secrets** e estas **variables**. Os nomes são os que o job `deploy` do [`ci.yml`](../.github/workflows/ci.yml) lê (`secrets.*` e `vars.*`). Os três secrets não guardam nada sigiloso (são identificadores), mas o workflow os lê como secrets.
 
-| Variável no GitHub | Output do Terraform |
-|---|---|
-| `AZURE_CLIENT_ID` | `github_client_id` |
-| `AZURE_TENANT_ID` | `tenant_id` |
-| `AZURE_SUBSCRIPTION_ID` | `subscription_id` |
-| `AZURE_RESOURCE_GROUP` | `resource_group` |
-| `API_APP_NAME` | `api_app_name` |
-| `WEB_APP_NAME` | `web_app_name` |
+| Tipo | Nome no GitHub | Output do Terraform |
+|---|---|---|
+| Secret | `AZURE_CLIENT_ID` | `github_client_id` |
+| Secret | `AZURE_TENANT_ID` | `tenant_id` |
+| Secret | `AZURE_SUBSCRIPTION_ID` | `subscription_id` |
+| Variable | `AZURE_RG` | `resource_group` |
+| Variable | `ACA_API` | `api_app_name` |
+| Variable | `ACA_APP` | `web_app_name` |
+| Variable | `PUBLIC_URL` | `app_url` |
 
-Os outros outputs (`app_url`, `environment_name`, `key_vault_name`, `storage_account_name`, `postgres_fqdn`) servem para consulta. Nenhum output é segredo; os segredos ficam só no Key Vault.
+Os outros outputs (`environment_name`, `key_vault_name`, `storage_account_name`, `postgres_fqdn`) servem para consulta. Nenhum output é segredo; os segredos ficam só no Key Vault.
 
 Restrinja o environment `production` à branch `main` e exija aprovação para o deploy: a credencial federada confia em qualquer job que rode nesse environment.
 
@@ -168,7 +170,7 @@ Login e troca de imagem no workflow (sem senha, via OIDC):
 
 ```bash
 az login --service-principal -u "$AZURE_CLIENT_ID" -t "$AZURE_TENANT_ID" --federated-token "$TOKEN_OIDC"   # na prática: azure/login@v2
-az containerapp update -n "$API_APP_NAME" -g "$AZURE_RESOURCE_GROUP" --image ghcr.io/passo-seguro/passo-seguro-api:<sha>
+az containerapp update -n "$ACA_API" -g "$AZURE_RG" --image ghcr.io/passo-seguro/passo-seguro-api:<sha>
 ```
 
 O Terraform ignora mudanças na imagem dos contêineres (`ignore_changes`), então um `plan` depois de um deploy não desfaz a imagem nova.

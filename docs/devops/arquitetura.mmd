@@ -1,0 +1,40 @@
+flowchart LR
+    Cidadao["Celular do cidadão<br/>(PWA)"]
+    Obs["Prometheus + Grafana<br/>(locais)"]
+    GH["GitHub Actions"]
+    GHCR["GHCR<br/>(imagens)"]
+    Railway["Railway<br/>assistente (LLM)"]
+    Email["E-mail da equipe"]
+
+    subgraph Azure["Azure · centralus"]
+        direction TB
+        subgraph CAE["Container Apps"]
+            direction TB
+            App["App<br/>nginx · ingress externo · 8080"]
+            API["API<br/>FastAPI · ingress interno · 8000"]
+        end
+        subgraph SDB["snet-db · privado"]
+            PG[("PostgreSQL 16<br/>+ PostGIS")]
+        end
+        Files[("Azure Files<br/>fotos")]
+        Blob[("Blob privado<br/>painel.json")]
+        KV["Key Vault"]
+        LA["Log Analytics"]
+        Monitor["Azure Monitor<br/>alerta 5xx + orçamento"]
+    end
+
+    Cidadao -->|HTTPS| App
+    App -->|"/api"| API
+    API -->|"5432"| PG
+    API --> Files
+    API -->|"identidade gerenciada"| Blob
+    CAE -.->|"identidade gerenciada"| KV
+    CAE -.-> LA
+    API -->|"HTTPS + token"| Railway
+
+    GH -->|publica| GHCR
+    GH -->|"OIDC: az containerapp update"| CAE
+    GHCR -.->|pull| CAE
+
+    Obs -->|"HTTPS /metrics/api + token"| App
+    Monitor -->|e-mail| Email

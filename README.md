@@ -4,7 +4,7 @@
 
 > Plataforma de zeladoria colaborativa para calçadas de São Paulo: o pedestre fotografa um problema, a IA identifica o que é, o assistente explica quem resolve e uma automação encaminha o caso para a subprefeitura certa.
 
-**MVP no ar:** A definir
+**MVP no ar:** https://ca-passoseguro-app.ashysea-c9ccc16b.centralus.azurecontainerapps.io
 **Entrega:** 19/11/2026 às 23h55
 
 ---
@@ -30,9 +30,36 @@
 | Arquitetura: componentes | App web (PWA), API, serviço de visão, assistente com LLM local, automação de triagem, pipeline Airflow + Databricks, robô inspetor, nuvem via Terraform |
 | Fontes de dados | SP156 (dados abertos da Prefeitura), Infosiga (Detran-SP, CC BY 4.0), Open-Meteo, relatos do próprio app |
 | Modelos de IA | YOLO ajustado com fotos de calçadas; LLM pequeno aberto com RAG e LoRA; classificador TinyML de vibração no robô |
-| URL do MVP e repositório | A definir |
+| URL do MVP e repositório | MVP: https://ca-passoseguro-app.ashysea-c9ccc16b.centralus.azurecontainerapps.io · Repositório: https://github.com/Passo-Seguro/passo-seguro |
 | Indicadores de impacto | Tempo médio até o reparo; % de relatos encaminhados em menos de 24 h; problemas resolvidos por mês; relatos feitos por idosos e PcD |
 | ODS conectados | 11 (metas 11.2 e 11.7), 3 (meta 3.6), 10 (meta 10.2), 9 (meta 9.1) |
+
+---
+
+## Produção
+
+| | |
+|---|---|
+| **URL pública** | https://ca-passoseguro-app.ashysea-c9ccc16b.centralus.azurecontainerapps.io |
+| **Pipeline** | [![CI](https://github.com/Passo-Seguro/passo-seguro/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Passo-Seguro/passo-seguro/actions/workflows/ci.yml) |
+| **Nuvem** | Azure, região `centralus`: Container Apps (app e API) e PostgreSQL Flexible Server privado |
+| **Assistente (LLM)** | Railway, fora da Azure |
+| **No ar até** | 26/11/2026, para a correção |
+
+O app e a API escalam a zero. O primeiro acesso depois de um tempo parado pode demorar alguns segundos.
+
+![Arquitetura em produção](./docs/devops/arquitetura.png)
+
+Documentação de DevOps, em [`docs/devops/`](./docs/devops/):
+
+| Documento | O que traz |
+|---|---|
+| [Arquitetura](./docs/devops/arquitetura.md) | Diagrama, tabela de componentes e por que não uma VM |
+| [Responsabilidade compartilhada](./docs/devops/responsabilidade-compartilhada.md) | Quem cuida de quê: Microsoft e equipe, camada por camada |
+| [LGPD](./docs/devops/lgpd.md) | Onde ficam os dados pessoais, como são protegidos e o que está pendente |
+| [Custo](./docs/devops/custo.md) | Estimativa, franquias, custo do período e cenário de escala |
+| [Infraestrutura (Terraform)](./infra/README.md) | Como criar e operar a nuvem, riscos aceitos |
+| [Observabilidade](./observabilidade/README.md) | Prometheus e Grafana locais, alertas e roteiro do disparo |
 
 ---
 
@@ -148,7 +175,11 @@ O mesmo nome vale no modelo de visão, no banco, na triagem, no robô e nos grá
 passo-seguro/
 ├── app/          # PWA (front-end)
 ├── api/          # API (FastAPI)
-├── infra/        # Terraform da nuvem (ver infra/README.md), docker compose, pipeline de CI/CD
+├── infra/        # Terraform da nuvem (ver infra/README.md)
+├── observabilidade/  # Prometheus e Grafana locais (ver observabilidade/README.md)
+├── docs/devops/  # arquitetura, responsabilidade compartilhada, LGPD e custo
+├── .github/      # pipeline de CI/CD (workflows/ci.yml) e Dependabot
+├── docker-compose.yml  # stack de produção rodando localmente
 ├── openapi.yaml  # contratos de API
 └── README.md
 ```
@@ -165,8 +196,9 @@ passo-seguro/
 ## Privacidade e segurança
 
 - Nenhuma chave, senha ou dado pessoal real é versionado; `.env`, `*.tfvars`, `*.tfstate` e `secrets.h` ficam no `.gitignore`.
-- Fotos publicadas têm rostos e placas desfocados.
-- O identificador do cidadão usa hash SHA-256 com sal, e coordenadas públicas são arredondadas para cerca de 100 m.
+- Rostos e placas desfocados nas fotos: **pendente**. Ainda não está implementado; a API só remove o EXIF. O plano está em [`docs/devops/lgpd.md`](./docs/devops/lgpd.md).
+- O identificador do cidadão é guardado como HMAC-SHA256 com sal (o sal fica no Key Vault, fora do banco), e coordenadas públicas são arredondadas para cerca de 100 m.
+- A tabela completa de dados pessoais, o que está pendente e a transferência para os EUA estão em [`docs/devops/lgpd.md`](./docs/devops/lgpd.md).
 
 ## Contratos e mock
 
@@ -336,6 +368,113 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.
 ```
 
 Os testes e o estilo estão em [Desenvolvimento local da API](#api-fastapi--postgrespostgis) e em [`app/README.md`](./app/README.md).
+
+## Como reproduzir a infraestrutura
+
+Passo a passo para criar a nuvem do zero numa assinatura Azure. Os detalhes de cada etapa, os riscos aceitos e a solução de problemas estão em [`infra/README.md`](./infra/README.md).
+
+**Precisa de:** [Terraform](https://developer.hashicorp.com/terraform/install) 1.9 ou mais novo, [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli), Docker, a GitHub CLI (opcional) e papel **Owner** na assinatura (o Terraform cria atribuições de papel). Registre uma vez os provedores de recursos: `Microsoft.App`, `Microsoft.OperationalInsights`, `Microsoft.DBforPostgreSQL`, `Microsoft.KeyVault`, `Microsoft.Storage`, `Microsoft.Consumption`, `Microsoft.Insights`, `Microsoft.ManagedIdentity` e `Microsoft.Network` (`az provider register --namespace <nome>`).
+
+### 1. Bootstrap do state
+
+O state do Terraform fica numa conta de armazenamento criada à mão, fora do Terraform. Os comandos completos estão em [`infra/README.md`, seção 1](./infra/README.md#1-bootstrap-do-state). Em resumo: um resource group `rg-passoseguro-tfstate`, uma conta `Standard_LRS` sem acesso por chave nem blob público, um container `tfstate` e o papel *Storage Blob Data Contributor* para quem roda o Terraform. Depois:
+
+```bash
+cp infra/backend.hcl.example infra/backend.hcl     # ajuste os nomes; o git ignora este arquivo
+```
+
+### 2. Publicação inicial das imagens
+
+Os Container Apps precisam de uma imagem para existir. Publique uma tag `:bootstrap` de cada serviço no GHCR (o pipeline troca a tag a cada deploy):
+
+```bash
+export MSYS_NO_PATHCONV=1   # Git Bash no Windows
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <SEU_USUARIO_GITHUB> --password-stdin   # PAT com write:packages
+docker build -t ghcr.io/passo-seguro/passo-seguro-api:bootstrap api/
+docker build -t ghcr.io/passo-seguro/passo-seguro-app:bootstrap --build-arg VITE_API_URL=/api app/
+docker push ghcr.io/passo-seguro/passo-seguro-api:bootstrap
+docker push ghcr.io/passo-seguro/passo-seguro-app:bootstrap
+```
+
+Depois do primeiro push, deixe os dois pacotes **públicos** (Packages → Package settings): o Terraform não configura credenciais de registro, então o Container Apps puxa as imagens sem login.
+
+### 3. `terraform init`, `plan` e `apply`
+
+```bash
+cd infra
+az login
+export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+cp terraform.tfvars.example terraform.tfvars          # ajuste os valores; o git ignora *.tfvars
+export TF_VAR_assistente_token='<token do serviço do assistente no Railway>'
+
+terraform init -backend-config=backend.hcl
+terraform plan -out=passoseguro.tfplan
+terraform apply passoseguro.tfplan                     # leva de 15 a 20 minutos
+```
+
+Variáveis do `terraform.tfvars` ([`variables.tf`](./infra/variables.tf)):
+
+| Variável | Obrigatória | Para que serve |
+|---|---|---|
+| `location` | sim | Região de tudo (`centralus` na nossa assinatura) |
+| `image_api`, `image_app` | sim | Imagens `:bootstrap` do passo anterior |
+| `assistente_url` | sim | URL do serviço do assistente (Railway) |
+| `assistente_token` | sim | Token do assistente; vai para o Key Vault. Prefira `TF_VAR_assistente_token` |
+| `alert_email` | sim | E-mail dos alertas de 5xx e dos avisos de orçamento |
+| `min_replicas` | não (0) | 0 escala a zero; 1 mantém no ar (use na demonstração) |
+| `budget_amount`, `budget_start_date` | não (10 e `2026-11-01T00:00:00Z`) | Orçamento mensal em dólares e o dia 1 do mês em que começa |
+| `painel_publicadores_object_ids` | não (vazio) | Quem pode gravar o `painel.json` |
+
+O `terraform apply` é **sempre manual**: o pipeline nunca roda Terraform. Se for outra organização do GitHub, troque o `subject` da credencial federada em [`infra/identidade.tf`](./infra/identidade.tf), que traz os IDs numéricos da organização e do repositório.
+
+### 4. Secrets e variables do GitHub
+
+Em **Settings → Environments → `production`** (o nome tem de ser exatamente esse; restrinja o environment à branch `main`), crie com os valores de `terraform output`:
+
+| Tipo | Nome | Output do Terraform |
+|---|---|---|
+| Secret | `AZURE_CLIENT_ID` | `github_client_id` |
+| Secret | `AZURE_TENANT_ID` | `tenant_id` |
+| Secret | `AZURE_SUBSCRIPTION_ID` | `subscription_id` |
+| Variable | `AZURE_RG` | `resource_group` |
+| Variable | `ACA_API` | `api_app_name` |
+| Variable | `ACA_APP` | `web_app_name` |
+| Variable | `PUBLIC_URL` | `app_url` |
+
+Com isso, cada push na `main` roda o pipeline e o job `deploy` troca a imagem de cada app por OIDC. Veja [Pipeline](#pipeline).
+
+### 5. Docker Compose local
+
+A mesma stack, sem Azure: app, API e banco. Veja [Stack completa](#stack-completa-app--api--banco-como-em-produção).
+
+```bash
+docker compose up --build
+curl http://localhost:8080/api/painel
+docker compose down -v      # para e apaga os dados
+```
+
+### 6. Observabilidade local
+
+Prometheus e Grafana no notebook, raspando a produção. Cada raspagem acorda a API. Guia completo em [`observabilidade/README.md`](./observabilidade/README.md).
+
+```bash
+cd observabilidade
+cp .env.example .env        # PUBLIC_URL, senha do Grafana e webhook do Discord
+KV=$(terraform -chdir=../infra output -raw key_vault_name)
+az keyvault secret show --vault-name "$KV" --name metrics-token --query value -o tsv | tr -d '\r\n' > metrics-token
+./preparar.sh
+docker compose up -d        # Grafana em http://127.0.0.1:3000
+docker compose down         # desligue ao terminar
+```
+
+### 7. Desligar tudo
+
+```bash
+cd infra
+terraform destroy
+```
+
+Apaga os recursos de `rg-passoseguro-prod` e para o gasto. O Key Vault tem *purge protection* desligada de propósito, então o `destroy` o apaga de verdade. O state e o resource group `rg-passoseguro-tfstate` ficam, porque foram criados à mão.
 
 ## Licença
 
