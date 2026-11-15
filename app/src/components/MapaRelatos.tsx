@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { RelatoProximo } from '../api/tipos';
+import type { PrioridadeSubprefeitura, RelatoProximo } from '../api/tipos';
 import { infoPrioridade, infoStatus, rotuloCategoria } from '../lib/dominio';
 import type { Ponto } from '../lib/localizacao';
+import { ATRIBUICAO_GEOSAMPA } from '../lib/subprefeituras';
+import { CamadaSubprefeituras } from './CamadaSubprefeituras';
 import { SeloPrioridade, SeloStatus } from './Selos';
 
 export const URL_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -26,6 +28,8 @@ interface Props {
   /** Relato que deve abrir o balão (vindo da lista); um objeto novo reabre o mesmo balão. */
   abrir: { id: string } | null;
   onAreaMudou: (centro: Ponto, raioM: number) => void;
+  /** Painel de prioridades; quando vem, desenha as 32 subprefeituras pintadas pela faixa. */
+  subprefeituras?: PrioridadeSubprefeitura[] | null;
 }
 
 /** Marcador: cor + texto da prioridade (nunca só cor). O texto completo fica só para leitor de tela. */
@@ -65,7 +69,7 @@ function ObedeceComando({ comando }: { comando: ComandoMapa | null }) {
   return null;
 }
 
-export function MapaRelatos({ centro, zoom = 15, relatos, comando, abrir, onAreaMudou }: Props) {
+export function MapaRelatos({ centro, zoom = 15, relatos, comando, abrir, onAreaMudou, subprefeituras }: Props) {
   const marcadores = useRef(new Map<string, L.Marker>());
   const icones = useMemo(() => new Map(relatos.map((r) => [r.id, iconeDoRelato(r)])), [relatos]);
 
@@ -76,7 +80,8 @@ export function MapaRelatos({ centro, zoom = 15, relatos, comando, abrir, onArea
   return (
     <div role="region" aria-label="Mapa dos problemas perto de você. A mesma informação está na lista abaixo do mapa.">
     <MapContainer center={[centro.lat, centro.lon]} zoom={zoom} className="mapa" scrollWheelZoom>
-      <TileLayer url={URL_TILES} attribution={ATRIBUICAO_OSM} maxZoom={19} />
+      <TileLayer url={URL_TILES} attribution={subprefeituras ? `${ATRIBUICAO_OSM} | ${ATRIBUICAO_GEOSAMPA}` : ATRIBUICAO_OSM} maxZoom={19} />
+      {subprefeituras && <CamadaSubprefeituras linhas={subprefeituras} />}
       <OuvinteArea onAreaMudou={onAreaMudou} />
       <ObedeceComando comando={comando} />
       {relatos.map((r) => (

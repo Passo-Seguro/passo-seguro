@@ -391,7 +391,47 @@ main {
 
 .barra-mapa {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
   margin-bottom: 14px;
+}
+
+.camada-opcao {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px; /* área de toque */
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camada-opcao input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--tinta);
+}
+
+.legenda-camada {
+  margin-top: 14px;
+}
+
+.amostra-faixa {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  border: 1.5px solid var(--tinta);
+  border-radius: 3px;
+}
+
+.amostra-sem-dados {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* O Leaflet põe 17 px de margem nos <p> do balão; a especificidade maior desfaz isso. */
+.leaflet-popup-content .balao-linha {
+  margin: 4px 0 0;
 }
 
 /* ---------- Textos de apoio ---------- */

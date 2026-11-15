@@ -5,9 +5,11 @@ import { IconeMais, IconePino } from '../components/Icones';
 import { MapaRelatos, type ComandoMapa } from '../components/MapaRelatos';
 import { Pagina } from '../components/Pagina';
 import { SeloPrioridade, SeloStatus } from '../components/Selos';
+import { usePainelDoMapa } from '../hooks/usePainelDoMapa';
 import { useRelatosProximos } from '../hooks/useRelatosProximos';
 import { INFO_PRIORIDADE, SEM_PRIORIDADE, infoPrioridade, rotuloCategoria } from '../lib/dominio';
 import { CENTRO_PADRAO, ErroLocalizacao, obterLocalizacao } from '../lib/localizacao';
+import { ATRIBUICAO_GEOSAMPA, OPACIDADE_FAIXA } from '../lib/subprefeituras';
 
 const POR_PAGINA = 20;
 
@@ -18,8 +20,16 @@ const LEGENDA = [
   { chave: 'nenhuma', info: SEM_PRIORIDADE, explicacao: 'ainda sem prioridade' },
 ];
 
+const FAIXAS = [
+  { chave: 'alta', texto: 'mais prioritárias' },
+  { chave: 'media', texto: 'intermediárias' },
+  { chave: 'baixa', texto: 'menos prioritárias' },
+] as const;
+
 export function Mapa() {
   const { itens, carregando, erro, buscar, tentarDeNovo } = useRelatosProximos();
+  const [camadaLigada, setCamadaLigada] = useState(false);
+  const { painel, tentarDeNovo: recarregarPainel } = usePainelDoMapa(camadaLigada);
   const [comando, setComando] = useState<ComandoMapa | null>(null);
   // Objeto novo a cada clique: pedir o mesmo relato duas vezes reabre o balão.
   const [abrir, setAbrir] = useState<{ id: string } | null>(null);
@@ -57,7 +67,29 @@ export function Mapa() {
         <button type="button" className="botao botao-secundario" onClick={irParaMim} disabled={procurando}>
           <IconePino /> {procurando ? 'Procurando…' : 'Usar minha localização'}
         </button>
+        <label className="camada-opcao">
+          <input type="checkbox" checked={camadaLigada} onChange={(e) => setCamadaLigada(e.target.checked)} />
+          Mostrar prioridade por subprefeitura
+        </label>
       </div>
+      {painel.fase === 'carregando' && (
+        <p role="status" className="dica">
+          Carregando as subprefeituras…
+        </p>
+      )}
+      {painel.fase === 'indisponivel' && (
+        <p role="status" className="dica">
+          O painel de prioridades ainda não tem dados, então não há o que mostrar por subprefeitura.
+        </p>
+      )}
+      {painel.fase === 'erro' && (
+        <div role="alert" className="anuncio anuncio-erro">
+          <p>Não consegui carregar as subprefeituras agora. O mapa continua funcionando.</p>
+          <button type="button" className="botao botao-secundario" onClick={recarregarPainel}>
+            Tentar de novo
+          </button>
+        </div>
+      )}
       <Anuncio mensagem={aviso} tipo="info" />
 
       <div id="mapa-regiao">
@@ -67,6 +99,7 @@ export function Mapa() {
           comando={comando}
           abrir={abrir}
           onAreaMudou={buscar}
+          subprefeituras={painel.fase === 'ok' ? painel.linhas : null}
         />
       </div>
 
@@ -80,6 +113,31 @@ export function Mapa() {
           </li>
         ))}
       </ul>
+
+      {painel.fase === 'ok' && (
+        <div className="legenda-camada">
+          <ul className="legenda" aria-label="Como ler as subprefeituras do mapa">
+            {FAIXAS.map(({ chave, texto }) => (
+              <li key={chave}>
+                <span
+                  className="amostra-faixa"
+                  style={{ background: `rgba(11, 42, 60, ${OPACIDADE_FAIXA[chave]})` }}
+                  aria-hidden="true"
+                />{' '}
+                {texto}
+              </li>
+            ))}
+            <li>
+              <span className="amostra-faixa amostra-sem-dados" aria-hidden="true" /> sem dados no painel
+            </li>
+          </ul>
+          <p className="dica">
+            Faixas relativas entre as 32 subprefeituras, pelo índice de atropelamentos de pedestres e reclamações de
+            calçada. Toque numa subprefeitura para ver os números, ou veja todas no{' '}
+            <Link to="/painel">painel</Link>. {ATRIBUICAO_GEOSAMPA}.
+          </p>
+        </div>
+      )}
 
       <section aria-labelledby="titulo-lista">
         <h2 id="titulo-lista">Lista de problemas nesta região</h2>

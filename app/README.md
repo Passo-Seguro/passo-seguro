@@ -30,6 +30,7 @@ mesmo domínio; veja a seção Docker).
 | `npm run lint` | ESLint (inclui regras de acessibilidade: jsx-a11y) |
 | `npm run gen:api` | gera `src/api/schema.d.ts` a partir de `../openapi.yaml` |
 | `npm run check:api` | falha se `schema.d.ts` estiver diferente do contrato |
+| `npm run gen:geo -- <subprefeitura.geojson>` | gera `src/geo/subprefeituras.json` (camada de subprefeituras do mapa) |
 
 Depois de mudar o `openapi.yaml`, rode `npm run gen:api` e commite o `schema.d.ts`.
 
@@ -74,6 +75,7 @@ sempre com símbolo + texto, `prefers-reduced-motion`.
 ```
 src/
   api/        cliente tipado (openapi-fetch) e schema.d.ts gerado
+  geo/        limites das 32 subprefeituras (gerado por `npm run gen:geo`)
   components/ mapa, seletor de local, selos, aviso de privacidade
   hooks/      busca de relatos por perto, fila offline, estado da conexão
   offline/    fila em IndexedDB e agendador de reenvio
@@ -92,6 +94,16 @@ src/
   qualidade; se não couber, reduz as dimensões). Respeita a rotação do EXIF.
 - **Prioridade nunca só por cor**: marcadores e selos levam símbolo e texto (▲ Alta, ◆ Média, ● Baixa, ○ Nova).
 - **A lista de relatos por perto existe fora do mapa**, para leitor de tela e teclado.
+- **Camada de subprefeituras no mapa** (caixa "Mostrar prioridade por subprefeitura", desligada por padrão):
+  pinta as 32 subprefeituras pela faixa de prioridade do `GET /painel` (tons de tinta, para não brigar com os
+  pinos dos relatos) e abre um balão com o índice, os atropelamentos e as reclamações de calçada. A cor não está
+  sozinha: o balão e a legenda trazem o texto, e o painel continua sendo a versão em lista. O painel só é
+  buscado quando a camada é ligada. Os polígonos (cerca de 200 KB, 43 KB comprimidos) são um chunk à parte,
+  carregado nessa hora; vêm do GeoSampa/SMUL, o mesmo arquivo que o pipeline de dados usa para atribuir cada
+  ponto a uma subprefeitura. A chave de junção é o nome normalizado (maiúsculas, sem acento: `SE`,
+  `SAO MATEUS`...) e um teste confere que são exatamente as 32 do painel. Para regerar:
+  `databricks fs cp dbfs:/Volumes/workspace/gs/chegada/geo/subprefeitura.geojson .` e
+  `npm run gen:geo -- subprefeitura.geojson`.
 - **Rótulos das classes** (`src/lib/dominio.ts`) são `Record<Categoria, …>`: se o enum do contrato mudar, o
   build quebra. Um teste compara a lista com `contratos/classes.yaml`.
 
