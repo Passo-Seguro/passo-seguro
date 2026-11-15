@@ -94,6 +94,10 @@ src/
   qualidade; se não couber, reduz as dimensões). Respeita a rotação do EXIF.
 - **Prioridade nunca só por cor**: marcadores e selos levam símbolo e texto (▲ Alta, ◆ Média, ● Baixa, ○ Nova).
 - **A lista de relatos por perto existe fora do mapa**, para leitor de tela e teclado.
+- **Computador (a partir de 1024 px)**: o menu sobe para o cabeçalho (no celular e no tablet segue fixo embaixo;
+  o HTML é o mesmo, a diferença é só de CSS e o menu vem antes do conteúdo na ordem do Tab). O mapa fica à esquerda,
+  fixo enquanto a lista rola, e à direita ficam o botão "Reportar problema" (que no celular flutua) e a lista de
+  relatos. O painel usa 3 colunas e as telas de texto e formulário ficam numa coluna central de 800 px.
 - **Camada de subprefeituras no mapa** (caixa "Mostrar prioridade por subprefeitura", desligada por padrão):
   pinta as 32 subprefeituras pela faixa de prioridade do `GET /painel` (tons de tinta, para não brigar com os
   pinos dos relatos) e abre um balão com o índice, os atropelamentos e as reclamações de calçada. A cor não está

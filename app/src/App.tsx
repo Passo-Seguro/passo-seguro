@@ -33,6 +33,20 @@ export function App() {
         <p className="marca">
           <Logo tamanho={34} /> <span>Passo Seguro</span>
         </p>
+        <nav className="menu" aria-label="Principal">
+          <NavLink to="/" end>
+            <IconeMapa /> <span>Mapa</span>
+          </NavLink>
+          <NavLink to="/meus-relatos">
+            <IconeRelatos /> <span>Meus relatos</span>
+          </NavLink>
+          <NavLink to="/pergunte">
+            <IconeChat /> <span>Pergunte</span>
+          </NavLink>
+          <NavLink to="/painel">
+            <IconePainel /> <span>Painel</span>
+          </NavLink>
+        </nav>
         <Link to="/privacidade" className="topo-link">
           Privacidade
         </Link>
@@ -54,21 +68,6 @@ export function App() {
           <Route path="*" element={<NaoEncontrada />} />
         </Routes>
       </main>
-
-      <nav className="menu" aria-label="Principal">
-        <NavLink to="/" end>
-          <IconeMapa /> <span>Mapa</span>
-        </NavLink>
-        <NavLink to="/meus-relatos">
-          <IconeRelatos /> <span>Meus relatos</span>
-        </NavLink>
-        <NavLink to="/pergunte">
-          <IconeChat /> <span>Pergunte</span>
-        </NavLink>
-        <NavLink to="/painel">
-          <IconePainel /> <span>Painel</span>
-        </NavLink>
-      </nav>
     </div>
   );
 }

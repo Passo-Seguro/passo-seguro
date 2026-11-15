@@ -92,109 +92,116 @@ export function Mapa() {
       )}
       <Anuncio mensagem={aviso} tipo="info" />
 
-      <div id="mapa-regiao">
-        <MapaRelatos
-          centro={CENTRO_PADRAO}
-          relatos={itens}
-          comando={comando}
-          abrir={abrir}
-          onAreaMudou={buscar}
-          subprefeituras={painel.fase === 'ok' ? painel.linhas : null}
-        />
-      </div>
+      <div className="mapa-layout">
+        <div className="mapa-coluna">
+          <div id="mapa-regiao">
+            <MapaRelatos
+              centro={CENTRO_PADRAO}
+              relatos={itens}
+              comando={comando}
+              abrir={abrir}
+              onAreaMudou={buscar}
+              subprefeituras={painel.fase === 'ok' ? painel.linhas : null}
+            />
+          </div>
 
-      <ul className="legenda" aria-label="Como ler os marcadores do mapa">
-        {LEGENDA.map(({ chave, info, explicacao }) => (
-          <li key={chave}>
-            <span className={`marcador marcador-${chave}`} aria-hidden="true">
-              {info.simbolo} {info.curto}
-            </span>{' '}
-            {explicacao}
-          </li>
-        ))}
-      </ul>
-
-      {painel.fase === 'ok' && (
-        <div className="legenda-camada">
-          <ul className="legenda" aria-label="Como ler as subprefeituras do mapa">
-            {FAIXAS.map(({ chave, texto }) => (
+          <ul className="legenda" aria-label="Como ler os marcadores do mapa">
+            {LEGENDA.map(({ chave, info, explicacao }) => (
               <li key={chave}>
-                <span
-                  className="amostra-faixa"
-                  style={{ background: `rgba(11, 42, 60, ${OPACIDADE_FAIXA[chave]})` }}
-                  aria-hidden="true"
-                />{' '}
-                {texto}
+                <span className={`marcador marcador-${chave}`} aria-hidden="true">
+                  {info.simbolo} {info.curto}
+                </span>{' '}
+                {explicacao}
               </li>
             ))}
-            <li>
-              <span className="amostra-faixa amostra-sem-dados" aria-hidden="true" /> sem dados no painel
-            </li>
           </ul>
-          <p className="dica">
-            Faixas relativas entre as 32 subprefeituras, pelo índice de atropelamentos de pedestres e reclamações de
-            calçada. Toque numa subprefeitura para ver os números, ou veja todas no{' '}
-            <Link to="/painel">painel</Link>. {ATRIBUICAO_GEOSAMPA}.
-          </p>
-        </div>
-      )}
 
-      <section aria-labelledby="titulo-lista">
-        <h2 id="titulo-lista">Lista de problemas nesta região</h2>
-        <p role="status" className="contagem">
-          {carregando
-            ? 'Buscando problemas…'
-            : erro
-              ? ''
-              : itens.length === 0
-                ? 'Nenhum problema registrado nesta região ainda.'
-                : itens.length === 1
-                  ? '1 problema nesta região.'
-                  : `${itens.length} problemas nesta região, do mais perto ao mais longe.`}
-        </p>
-        {erro && (
-          <div role="alert" className="anuncio anuncio-erro">
-            <p>Não consegui carregar os problemas desta região. O resto do app continua funcionando.</p>
-            <button type="button" className="botao botao-secundario" onClick={tentarDeNovo}>
-              Tentar de novo
-            </button>
-          </div>
-        )}
-        <ol className="cartoes">
-          {itens.slice(0, visiveis).map((r) => (
-            <li key={r.id} className="cartao">
-              <p className="cartao-titulo">{rotuloCategoria(r.categoria)}</p>
-              <p className="selos">
-                <SeloPrioridade prioridade={r.prioridade} /> <SeloStatus status={r.status} />
+          {painel.fase === 'ok' && (
+            <div className="legenda-camada">
+              <ul className="legenda" aria-label="Como ler as subprefeituras do mapa">
+                {FAIXAS.map(({ chave, texto }) => (
+                  <li key={chave}>
+                    <span
+                      className="amostra-faixa"
+                      style={{ background: `rgba(11, 42, 60, ${OPACIDADE_FAIXA[chave]})` }}
+                      aria-hidden="true"
+                    />{' '}
+                    {texto}
+                  </li>
+                ))}
+                <li>
+                  <span className="amostra-faixa amostra-sem-dados" aria-hidden="true" /> sem dados no painel
+                </li>
+              </ul>
+              <p className="dica">
+                Faixas relativas entre as 32 subprefeituras, pelo índice de atropelamentos de pedestres e reclamações de
+                calçada. Toque numa subprefeitura para ver os números, ou veja todas no{' '}
+                <Link to="/painel">painel</Link>. {ATRIBUICAO_GEOSAMPA}.
               </p>
-              <p className="cartao-detalhe">
-                {r.confirmacoes === 1 ? '1 pessoa confirmou' : `${r.confirmacoes} pessoas confirmaram`}
-              </p>
+            </div>
+          )}
+
+        </div>
+
+        <div className="mapa-lista">
+          <Link to="/reportar" className="botao botao-fixo">
+            <IconeMais /> Reportar problema
+          </Link>
+
+          <section aria-labelledby="titulo-lista">
+            <h2 id="titulo-lista">Lista de problemas nesta região</h2>
+            <p role="status" className="contagem">
+              {carregando
+                ? 'Buscando problemas…'
+                : erro
+                  ? ''
+                  : itens.length === 0
+                    ? 'Nenhum problema registrado nesta região ainda.'
+                    : itens.length === 1
+                      ? '1 problema nesta região.'
+                      : `${itens.length} problemas nesta região, do mais perto ao mais longe.`}
+            </p>
+            {erro && (
+              <div role="alert" className="anuncio anuncio-erro">
+                <p>Não consegui carregar os problemas desta região. O resto do app continua funcionando.</p>
+                <button type="button" className="botao botao-secundario" onClick={tentarDeNovo}>
+                  Tentar de novo
+                </button>
+              </div>
+            )}
+            <ol className="cartoes">
+              {itens.slice(0, visiveis).map((r) => (
+                <li key={r.id} className="cartao">
+                  <p className="cartao-titulo">{rotuloCategoria(r.categoria)}</p>
+                  <p className="selos">
+                    <SeloPrioridade prioridade={r.prioridade} /> <SeloStatus status={r.status} />
+                  </p>
+                  <p className="cartao-detalhe">
+                    {r.confirmacoes === 1 ? '1 pessoa confirmou' : `${r.confirmacoes} pessoas confirmaram`}
+                  </p>
+                  <button
+                    type="button"
+                    className="botao botao-secundario"
+                    onClick={() => verNoMapa(r.id, r.lat, r.lon)}
+                    aria-label={`Ver no mapa: ${rotuloCategoria(r.categoria)}, ${infoPrioridade(r.prioridade).rotulo}`}
+                  >
+                    Ver no mapa
+                  </button>
+                </li>
+              ))}
+            </ol>
+            {itens.length > visiveis && (
               <button
                 type="button"
                 className="botao botao-secundario"
-                onClick={() => verNoMapa(r.id, r.lat, r.lon)}
-                aria-label={`Ver no mapa: ${rotuloCategoria(r.categoria)}, ${infoPrioridade(r.prioridade).rotulo}`}
+                onClick={() => setVisiveis((v) => v + POR_PAGINA)}
               >
-                Ver no mapa
+                Mostrar mais {Math.min(POR_PAGINA, itens.length - visiveis)}
               </button>
-            </li>
-          ))}
-        </ol>
-        {itens.length > visiveis && (
-          <button
-            type="button"
-            className="botao botao-secundario"
-            onClick={() => setVisiveis((v) => v + POR_PAGINA)}
-          >
-            Mostrar mais {Math.min(POR_PAGINA, itens.length - visiveis)}
-          </button>
-        )}
-      </section>
-
-      <Link to="/reportar" className="botao botao-fixo">
-        <IconeMais /> Reportar problema
-      </Link>
+            )}
+          </section>
+        </div>
+      </div>
     </Pagina>
   );
 }
