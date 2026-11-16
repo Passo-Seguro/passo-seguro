@@ -391,7 +391,47 @@ main {
 
 .barra-mapa {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
   margin-bottom: 14px;
+}
+
+.camada-opcao {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px; /* área de toque */
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camada-opcao input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--tinta);
+}
+
+.legenda-camada {
+  margin-top: 14px;
+}
+
+.amostra-faixa {
+  display: inline-block;
+  width: 22px;
+  height: 14px;
+  border: 1.5px solid var(--tinta);
+  border-radius: 3px;
+}
+
+.amostra-sem-dados {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* O Leaflet põe 17 px de margem nos <p> do balão; a especificidade maior desfaz isso. */
+.leaflet-popup-content .balao-linha {
+  margin: 4px 0 0;
 }
 
 /* ---------- Textos de apoio ---------- */
@@ -1237,6 +1277,113 @@ input[type='text'] {
 
   .botao-fixo {
     bottom: calc(var(--altura-menu) + 36px);
+  }
+}
+
+/* ---------- Computador (a partir de 1024 px) ----------
+   Celular e tablet seguem como antes: menu fixo embaixo e uma coluna. Aqui o menu sobe para o
+   cabeçalho, o mapa ganha uma lista ao lado e as telas usam a largura do monitor. */
+
+@media (min-width: 1024px) {
+  /* O conteúdo começa onde o miolo da página começa: o cabeçalho acompanha a largura do <main>. */
+  .topo {
+    padding-inline: max(24px, calc((100% - 1280px) / 2 + 24px));
+    gap: 24px;
+  }
+
+  main {
+    max-width: 1280px;
+    padding: 28px 24px 56px;
+  }
+
+  /* Telas de leitura e de formulário ficam numa coluna confortável, centralizada. */
+  .pagina:not(.pagina-mapa):not(.pagina-painel) {
+    max-width: 800px;
+    margin-inline: auto;
+  }
+
+  /* Menu: do rodapé flutuante para uma barra horizontal no cabeçalho. */
+  .menu {
+    position: static;
+    z-index: auto;
+    display: flex;
+    gap: 4px;
+    width: auto;
+    margin-left: auto;
+    padding: 0;
+    transform: none;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .menu a {
+    flex-direction: row;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 1rem;
+  }
+
+  .menu a .icone {
+    width: 1.3em;
+    height: 1.3em;
+  }
+
+  .menu a:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+
+  .menu a[aria-current='page'] {
+    background: var(--tinta-2);
+    color: var(--amarelo);
+    box-shadow: inset 0 -4px 0 var(--amarelo);
+  }
+
+  /* Mapa à esquerda (fixo enquanto a lista rola) e, à direita, o botão e a lista de relatos. */
+  .mapa-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 28px;
+    align-items: start;
+  }
+
+  .mapa-coluna {
+    position: sticky;
+    top: 16px;
+  }
+
+  .mapa {
+    height: calc(100dvh - 190px);
+    min-height: 460px;
+  }
+
+  .mapa-lista .cartoes {
+    grid-template-columns: 1fr;
+  }
+
+  /* No computador o botão deixa de flutuar por cima do conteúdo: abre a coluna da lista. */
+  .botao-fixo {
+    position: static;
+    width: 100%;
+    max-width: none;
+    min-height: 60px;
+    margin: 0 0 20px;
+    transform: none;
+    font-size: 1.6rem;
+  }
+
+  .botao-fixo:active {
+    transform: translateY(3px);
+  }
+
+  /* Painel: três colunas de cartões. */
+  .cartoes-painel {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

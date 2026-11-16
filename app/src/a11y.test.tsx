@@ -95,6 +95,21 @@ describe('acessibilidade (axe)', () => {
     expect(ids).toEqual(expect.arrayContaining(['button-name', 'image-alt']));
   });
 
+  it('o menu principal vem no cabeçalho, antes do conteúdo (ordem do Tab e dos leitores de tela)', async () => {
+    api();
+    const { findByRole, container } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+    await findByRole('heading', { level: 1 });
+    const menu = container.querySelector('header nav[aria-label="Principal"]');
+    expect(menu).not.toBeNull();
+    const principal = container.querySelector('main')!;
+    expect(menu!.compareDocumentPosition(principal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect([...menu!.querySelectorAll('a')].map((a) => a.textContent?.trim())).toEqual(['Mapa', 'Meus relatos', 'Pergunte', 'Painel']);
+  });
+
   it('Mapa', () => auditar('/', async () => { await vi.waitFor(() => expect(document.querySelectorAll('.cartao').length).toBeGreaterThan(0)); }));
   it('Reportar: passo da foto', () => auditar('/reportar'));
   it('Meus relatos', () =>
