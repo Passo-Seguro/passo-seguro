@@ -39,7 +39,7 @@ cryptography==50.0.2
     #   azure-storage-blob
     #   msal
     #   pyjwt
-fastapi==0.162.0
+fastapi==0.162.2
     # via -r requirements.in
 geoalchemy2==0.21.0
     # via -r requirements.in
@@ -131,9 +131,7 @@ typing-inspection==0.4.5
     #   pydantic
     #   pydantic-settings
 tzdata==2026.6
-    # via
-    #   -r requirements.in
-    #   psycopg
+    # via -r requirements.in
 urllib3==2.8.0
     # via requests
 uvicorn==0.54.0
