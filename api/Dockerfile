@@ -2,7 +2,7 @@
 # venv; a imagem final copia só o venv e o código (sem compilador, sem cache do pip).
 # Nenhum segredo entra na imagem: tudo vem por variável de ambiente em tempo de execução.
 
-FROM python:3.12-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 
-FROM python:3.12-slim AS final
+FROM python:3.15-slim AS final
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
