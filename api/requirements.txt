@@ -96,7 +96,7 @@ pyjwt==2.15.1
     #   pyjwt
 python-dotenv==1.2.4
     # via pydantic-settings
-python-multipart==0.0.33
+python-multipart==0.0.34
     # via -r requirements.in
 requests==2.34.2
     # via
@@ -131,9 +131,7 @@ typing-inspection==0.4.5
     #   pydantic
     #   pydantic-settings
 tzdata==2026.6
-    # via
-    #   -r requirements.in
-    #   psycopg
+    # via -r requirements.in
 urllib3==2.8.0
     # via requests
 uvicorn==0.54.0
