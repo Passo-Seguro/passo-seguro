@@ -76,9 +76,9 @@ pillow==13.0.0
     # via -r requirements.in
 prometheus-client==0.26.0
     # via -r requirements.in
-psycopg==3.3.8
+psycopg==3.3.9
     # via -r requirements.in
-psycopg-binary==3.3.8
+psycopg-binary==3.3.9
     # via psycopg
 pycparser==3.12
     # via cffi
@@ -131,9 +131,7 @@ typing-inspection==0.4.5
     #   pydantic
     #   pydantic-settings
 tzdata==2026.6
-    # via
-    #   -r requirements.in
-    #   psycopg
+    # via -r requirements.in
 urllib3==2.8.0
     # via requests
 uvicorn==0.54.0
